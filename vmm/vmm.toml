@@ -6,7 +6,7 @@ keep_alive = 10
 log_level = "debug"
 address = "unix:./vmm.sock"
 reuse = true
-kms_url = "http://127.0.0.1:8081"
+kms_url = "http://127.0.0.1:9201"
 
 
 [networking]
@@ -17,8 +17,8 @@ restrict = false
 
 [cvm]
 qemu_path = ""
-kms_urls = ["http://127.0.0.1:8081"]
-gateway_urls = ["http://127.0.0.1:8082"]
+kms_urls = ["http://127.0.0.1:9201"]
+gateway_urls = ["http://127.0.0.1:9202"]
 # PCCS URL used by guest to verify the quote from local key provider
 pccs_url = ""
 docker_registry = ""
