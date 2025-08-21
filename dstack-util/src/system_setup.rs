@@ -299,7 +299,9 @@ impl<'a> Stage0<'a> {
                 .await
                 .context("Failed to get temp ca cert")?
         };
+        info!("1111");
         let cert_pair = generate_ra_cert(tmp_ca.temp_ca_cert, tmp_ca.temp_ca_key)?;
+        info!("2222");
         let ra_client = RaClientConfig::builder()
             .tls_no_check(false)
             .tls_built_in_root_certs(false)

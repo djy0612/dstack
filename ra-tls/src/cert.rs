@@ -320,7 +320,84 @@ pub struct CertPair {
     /// The key in PEM format.
     pub key_pem: String,
 }
+fn create_mock_quote(report_data: &[u8]) -> Vec<u8> {
+    // 基于 TDX quote 格式构建更真实的模拟数据
+    let mut mock_quote = Vec::new();
+    
+    // ECDSA Quote 头部 (4 字节版本 + 4 字节 attestation key type)
+    mock_quote.extend_from_slice(&[0x03, 0x00, 0x00, 0x00]); // 版本 3
+    mock_quote.extend_from_slice(&[0x02, 0x00, 0x00, 0x00]); // ECDSA 签名类型
+    
+    // QE Vendor ID (16 字节)
+    mock_quote.extend_from_slice(&[0x93, 0x9A, 0x72, 0x33, 0xF7, 0x9C, 0x4C, 0xA9, 
+                                  0x94, 0x0A, 0x0D, 0xB3, 0x95, 0x7F, 0x06, 0x07]);
+    
+    // 用户数据长度 (2 字节) - 设为 0
+    mock_quote.extend_from_slice(&[0x00, 0x00]);
+    
+    // Quote 认证数据 - 包含 report_data (64 bytes)
+    let mut auth_data = Vec::new();
+    auth_data.extend_from_slice(&[0x00; 32]); // TD Report 头部
+    auth_data.extend_from_slice(report_data);  // Report Data (64 bytes)
+    auth_data.extend_from_slice(&[0x00; 128]); // 其他 TD Report 数据
+    
+    // 添加 auth_data 长度 (4 字节)
+    let auth_data_len = auth_data.len() as u32;
+    mock_quote.extend_from_slice(&auth_data_len.to_le_bytes());
+    
+    // 添加 auth_data
+    mock_quote.extend_from_slice(&auth_data);
+    
+    // 添加签名部分
+    let signature_size = 128u32;
+    mock_quote.extend_from_slice(&signature_size.to_le_bytes());
+    mock_quote.extend_from_slice(&[0xBB; 128]); // 模拟 ECDSA 签名
+    
+    mock_quote
+}
 
+// 添加一个创建模拟 event_log 的函数
+fn create_mock_event_logs() -> serde_json::Value {
+    // 创建一个基本的模拟 event_log 结构
+    serde_json::json!({
+        "module": "tdx_eventlog",
+        "version": "0.1.0",
+        "events": [
+            {
+                "index": 0,
+                "rtmr": 0,
+                "event_type": 1,
+                "event_name": "STUB_EVENT_0",
+                "digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "data": "0000000000000000"
+            },
+            {
+                "index": 1,
+                "rtmr": 1,
+                "event_type": 1,
+                "event_name": "STUB_EVENT_1",
+                "digest": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+                "data": "0101010101010101"
+            },
+            {
+                "index": 2,
+                "rtmr": 2,
+                "event_type": 1,
+                "event_name": "STUB_EVENT_2",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "data": "0202020202020202"
+            },
+            {
+                "index": 3,
+                "rtmr": 3,
+                "event_type": 1,
+                "event_name": "STUB_EVENT_3",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "data": "0303030303030303"
+            }
+        ]
+    })
+}
 /// Generate a certificate with RA-TLS quote and event log.
 pub fn generate_ra_cert(ca_cert_pem: String, ca_key_pem: String) -> Result<CertPair> {
     use rcgen::{KeyPair, PKCS_ECDSA_P256_SHA256};
@@ -330,8 +407,10 @@ pub fn generate_ra_cert(ca_cert_pem: String, ca_key_pem: String) -> Result<CertP
     let key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256)?;
     let pubkey = key.public_key_der();
     let report_data = QuoteContentType::RaTlsCert.to_report_data(&pubkey);
-    let (_, quote) = get_quote(&report_data, None).context("Failed to get quote")?;
-    let event_logs = read_event_logs().context("Failed to read event logs")?;
+    //let (_, quote) = get_quote(&report_data, None).context("Failed to get quote")?;
+    let quote = create_mock_quote(&report_data);
+    //let event_logs = read_event_logs().context("Failed to read event logs")?;
+    let event_logs = create_mock_event_logs(); 
     let event_log = serde_json::to_vec(&event_logs).context("Failed to serialize event logs")?;
     let req = CertRequest::builder()
         .subject("RA-TLS TEMP Cert")
