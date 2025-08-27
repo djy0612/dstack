@@ -6,7 +6,7 @@ cat <<EOF > ./kms.toml
 admin_token_hash = "${ADMIN_TOKEN_HASH}"
 
 [core.image]
-verify = true
+verify = false
 cache_dir = "./images"
 download_url = "${IMAGE_DOWNLOAD_URL}"
 download_timeout = "2m"
