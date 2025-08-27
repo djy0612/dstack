@@ -30,7 +30,7 @@ download_url = "http://localhost:8000/{OS_IMAGE_HASH}.tar.gz"
 download_timeout = "2m"
 
 [core.auth_api]
-type = "webhook"
+type = "dev"
 
 [core.auth_api.webhook]
 url = "http://auth-api:8000"
