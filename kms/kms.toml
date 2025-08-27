@@ -24,7 +24,7 @@ subject_postfix = ".dstack"
 admin_token_hash = ""
 
 [core.image]
-verify = true
+verify = false
 cache_dir = "/usr/share/dstack/images"
 download_url = "http://localhost:8000/{OS_IMAGE_HASH}.tar.gz"
 download_timeout = "2m"
