@@ -137,7 +137,14 @@ impl CertRequestClient {
                 serde_json::to_vec(&event_log).context("Failed to serialize event log")?;
             (quote, event_log)
         } else {
-            (vec![], vec![])
+            //(vec![], vec![])
+            //let (_, quote) = get_quote(&report_data, None).context("Failed to get quote")?;
+            let quote = Self::create_mock_quote(&report_data);
+            //let event_log = read_event_logs().context("Failed to decode event log")?;
+            let event_log = Self::create_mock_event_logs(); 
+            let event_log =
+                serde_json::to_vec(&event_log).context("Failed to serialize event log")?;
+            (quote, event_log)
         };
 
         let csr = CertSigningRequest {
