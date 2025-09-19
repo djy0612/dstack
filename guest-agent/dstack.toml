@@ -13,7 +13,7 @@ sys_config_file = "/dstack/.host-shared/.sys-config.json"
 data_disks = ["/"]
 
 [default.core.simulator]
-enabled = true
+enabled = false
 quote_file = "quote.hex"
 event_log_file = "eventlog.json"
 

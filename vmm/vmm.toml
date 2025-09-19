@@ -58,9 +58,9 @@ include = []
 allow_attach_all = true
 
 [gateway]
-base_domain = "localhost"
-port = 8082
-agent_port = 8090
+base_domain = "dstack.ip-ddns.com"
+port = 9204
+agent_port = 9206
 
 [auth]
 enabled = false
