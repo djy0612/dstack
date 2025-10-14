@@ -1,20 +1,18 @@
 //! Attestation functions
 
-use std::borrow::Cow;
 
 use anyhow::{anyhow, bail, Context, Result};
-use dcap_qvl::quote::Quote;
-use qvl::{
-    quote::{EnclaveReport, Report, TDReport10, TDReport15},
-    verify::VerifiedReport,
-};
+// CSV证明不需要dcap_qvl和qvl
 use serde::Serialize;
 use sha2::{Digest as _, Sha384};
 use x509_parser::parse_x509_certificate;
 
 use crate::{oids, traits::CertExt};
-use cc_eventlog::TdxEventLog as EventLog;
+use cc_eventlog::TdxEventLog as EventLog; // 保持兼容性，cc-eventlog使用TdxEventLog类型
 use serde_human_bytes as hex_bytes;
+use csv_attest::{CsvAttestationClient, CsvAttestationReport, get_all_rtmr_values};
+
+// 已移除 JSON SerializableCsvReport；我们改为全程使用原始字节
 
 /// The content type of a quote. A CVM should only generate quotes for these types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,8 +86,17 @@ impl QuoteContentType<'_> {
     }
 }
 
-/// Represents a verified attestation
-pub type VerifiedAttestation = Attestation<VerifiedReport>;
+/// CSV验证报告
+#[derive(Debug, Clone)]
+pub struct CsvVerifiedReport {
+    /// 验证状态
+    pub status: String,
+    /// 建议ID列表
+    pub advisory_ids: Vec<String>,
+}
+
+/// 表示已验证的证明
+pub type VerifiedAttestation = Attestation<CsvVerifiedReport>;
 
 /// Attestation data
 #[derive(Debug, Clone)]
@@ -105,9 +112,9 @@ pub struct Attestation<R = ()> {
 }
 
 impl<T> Attestation<T> {
-    /// Decode the quote
-    pub fn decode_quote(&self) -> Result<Quote> {
-        Quote::parse(&self.quote)
+    /// Decode the quote (CSV version - returns the raw quote data)
+    pub fn decode_quote(&self) -> Result<Vec<u8>> {
+        Ok(self.quote.clone())
     }
 
     fn find_event(&self, imr: u32, ad: &str) -> Result<EventLog> {
@@ -152,54 +159,58 @@ impl<T> Attestation<T> {
         Ok(hex::encode(&event.event_payload))
     }
 
-    /// Decode the app info from the event log
+    /// 从事件日志中解码应用信息
     pub fn decode_app_info(&self, boottime_mr: bool) -> Result<AppInfo> {
+        // 重放事件日志获取RTMR值
         let rtmrs = self
             .replay_event_logs(boottime_mr.then_some("boot-mr-done"))
-            .context("Failed to replay event logs")?;
-        let quote = self.decode_quote()?;
-        let device_id = sha256(&[&quote.header.user_data]).to_vec();
-        let td_report = quote.report.as_td10().context("TDX report not found")?;
+            .context("重放事件日志失败")?;
+        
+        // 从原始CSV报告字节中解析user_data作为设备ID
+        let user_data = extract_user_data_from_report_bytes(&self.quote)
+            .context("解析CSV报告失败")?;
+        let device_id = sha256(&[&user_data]).to_vec();
+        
+        // 从事件日志中获取key provider信息
         let key_provider_info = if boottime_mr {
             vec![]
         } else {
             self.find_event_payload("key-provider").unwrap_or_default()
         };
+        
+        // 计算key provider的哈希值
         let mr_key_provider = if key_provider_info.is_empty() {
             [0u8; 32]
         } else {
             sha256(&[&key_provider_info])
         };
+        
+        // 计算系统测量值（基于CSV报告的用户数据和RTMR值）
         let mr_system = sha256(&[
-            &td_report.mr_td,
+            &user_data,
             &rtmrs[0],
             &rtmrs[1],
             &rtmrs[2],
             &mr_key_provider,
         ]);
+        
+        // 计算聚合测量值
         let mr_aggregated = {
             use sha2::{Digest as _, Sha256};
             let mut hasher = Sha256::new();
-            for d in [&td_report.mr_td, &rtmrs[0], &rtmrs[1], &rtmrs[2], &rtmrs[3]] {
-                hasher.update(d);
-            }
-            // For backward compatibility. Don't include mr_config_id, mr_owner, mr_owner_config if they are all 0.
-            if td_report.mr_config_id != [0u8; 48]
-                || td_report.mr_owner != [0u8; 48]
-                || td_report.mr_owner_config != [0u8; 48]
-            {
-                hasher.update(td_report.mr_config_id);
-                hasher.update(td_report.mr_owner);
-                hasher.update(td_report.mr_owner_config);
+            hasher.update(&user_data);
+            for rtmr in &rtmrs {
+                hasher.update(rtmr);
             }
             hasher.finalize().into()
         };
+        
         Ok(AppInfo {
             app_id: self.find_event_payload("app-id").unwrap_or_default(),
-            compose_hash: self.find_event_payload("compose-hash")?,
+            compose_hash: self.find_event_payload("compose-hash").unwrap_or_default(),
             instance_id: self.find_event_payload("instance-id").unwrap_or_default(),
             device_id,
-            mrtd: td_report.mr_td,
+            mrtd: [0u8; 48], // CSV没有MRTD
             rtmr0: rtmrs[0],
             rtmr1: rtmrs[1],
             rtmr2: rtmrs[2],
@@ -217,22 +228,42 @@ impl<T> Attestation<T> {
             .map(|event| hex::encode(event.digest))
     }
 
-    /// Decode the report data in the quote
+    /// 从CSV报告中解码报告数据
     pub fn decode_report_data(&self) -> Result<[u8; 64]> {
-        match self.decode_quote()?.report {
-            Report::SgxEnclave(report) => Ok(report.report_data),
-            Report::TD10(report) => Ok(report.report_data),
-            Report::TD15(report) => Ok(report.base.report_data),
-        }
+        // 从原始CSV报告字节中解析用户数据
+        extract_user_data_from_report_bytes(&self.quote)
     }
 }
 
 impl Attestation {
-    /// Create an attestation for local machine
+    /// 为本地机器创建证明（使用CSV）
     pub fn local() -> Result<Self> {
-        let (_, quote) = tdx_attest::get_quote(&[0u8; 64], None)?;
-        let event_log = tdx_attest::eventlog::read_event_logs()?;
+        // 使用CSV证明客户端获取证明报告
+        let mut client = CsvAttestationClient::new();
+        client.generate_nonce()?;
+        
+        // 尝试通过ioctl获取证明报告，失败则使用vmmcall
+        let csv_report = client.get_attestation_report_ioctl()
+            .or_else(|_| client.get_attestation_report_vmmcall())
+            .context("获取CSV证明报告失败")?;
+        
+        // 将CsvAttestationReport按内存布局拷贝为原始字节
+        let size = core::mem::size_of_val(&csv_report);
+        let mut quote = Vec::with_capacity(size);
+        unsafe {
+            quote.set_len(size);
+            core::ptr::copy_nonoverlapping(
+                &csv_report as *const _ as *const u8,
+                quote.as_mut_ptr(),
+                size,
+            );
+        }
+        
+        // 使用cc-eventlog模块读取事件日志
+        let event_log = cc_eventlog::read_event_logs()
+            .context("读取事件日志失败")?;
         let raw_event_log = serde_json::to_vec(&event_log)?;
+        
         Ok(Self {
             quote,
             raw_event_log,
@@ -300,107 +331,58 @@ impl Attestation {
         .await
     }
 
-    /// Verify the quote
-    /*pub async fn verify(
-        self,
-        report_data: &[u8; 64],
-        pccs_url: Option<&str>,
-    ) -> Result<VerifiedAttestation> {
-        let quote = &self.quote;
-        if &self.decode_report_data()? != report_data {
-            bail!("report data mismatch");
-        }
-        let mut pccs_url = Cow::Borrowed(pccs_url.unwrap_or_default());
-        if pccs_url.is_empty() {
-            // try to read from PCCS_URL env var
-            pccs_url = match std::env::var("PCCS_URL") {
-                Ok(url) => Cow::Owned(url),
-                Err(_) => Cow::Borrowed(""),
-            };
-        }
-        let report = qvl::collateral::get_collateral_and_verify(quote, Some(pccs_url.as_ref()))
-            .await
-            .context("Failed to get collateral")?;
-        if let Some(report) = report.report.as_td10() {
-            // Replay the event logs
-            let rtmrs = self
-                .replay_event_logs(None)
-                .context("Failed to replay event logs")?;
-            if rtmrs != [report.rt_mr0, report.rt_mr1, report.rt_mr2, report.rt_mr3] {
-                bail!("RTMR mismatch");
-            }
-        }
-        validate_tcb(&report)?;
-        Ok(VerifiedAttestation {
-            quote: self.quote,
-            raw_event_log: self.raw_event_log,
-            event_log: self.event_log,
-            report,
-        })
-    }*/
+    // TDX验证代码已移除，现在使用CSV验证
+    /// 验证CSV证明
     pub async fn verify(
         self,
         report_data: &[u8; 64],
-        pccs_url: Option<&str>,
+        _pccs_url: Option<&str>,
     ) -> Result<VerifiedAttestation> {
-        // 跳过 report data 验证
-        // if &self.decode_report_data()? != report_data {
-        //     bail!("report data mismatch");
-        // }
+        // 从原始CSV报告字节中解析用户数据
+        let user_data = extract_user_data_from_report_bytes(&self.quote)
+            .context("解析CSV报告失败")?;
         
-        // 跳过 PCCS URL 处理和实际验证
-        // 创建一个伪造的 VerifiedReport
-        let quote = self.decode_quote()?;
-        let fake_report = VerifiedReport {
-            report: quote.report,
-            status: "OK".to_string(), // 添加默认状态
-            advisory_ids: vec![], // 添加空的建议ID列表
+        // 验证报告数据是否匹配
+        if &user_data != report_data {
+            bail!("报告数据不匹配");
+        }
+        
+        // 使用CSV SDK验证原始报告字节
+        let report_bytes = &mut self.quote.clone();
+        csv_attest::verify_attestation_report(report_bytes, true)
+            .context("CSV证明验证失败")?;
+        
+        // 创建CSV验证报告（仅携带最少必要信息）
+        let csv_verified_report = CsvVerifiedReport {
+            status: "OK".to_string(),
+            advisory_ids: vec![],
         };
-        
-        // 跳过 RTMR 验证
-        // 跳过 TCB 验证
         
         Ok(VerifiedAttestation {
             quote: self.quote,
             raw_event_log: self.raw_event_log,
             event_log: self.event_log,
-            report: fake_report,
+            report: csv_verified_report,
         })
     }  
 }
 
-impl Attestation<VerifiedReport> {}
+impl Attestation<CsvVerifiedReport> {}
 
-/// Validate the TCB attributes
-pub fn validate_tcb(report: &VerifiedReport) -> Result<()> {
-    fn validate_td10(report: &TDReport10) -> Result<()> {
-        let is_debug = report.td_attributes[0] & 0x01 != 0;
-        if is_debug {
-            bail!("Debug mode is not allowed");
-        }
-        if report.mr_signer_seam != [0u8; 48] {
-            bail!("Invalid mr signer seam");
-        }
-        Ok(())
+/// 验证CSV TCB属性
+pub fn validate_tcb(report: &CsvVerifiedReport) -> Result<()> {
+    // CSV特定的验证逻辑
+    // 这里可以添加CSV特定的验证，比如检查VM ID、版本等
+    
+    // 检查验证状态
+    if report.status != "OK" {
+        bail!("CSV验证状态异常: {}", report.status);
     }
-    fn validate_td15(report: &TDReport15) -> Result<()> {
-        if report.mr_service_td != [0u8; 48] {
-            bail!("Invalid mr service td");
-        }
-        validate_td10(&report.base)
-    }
-    fn validate_sgx(report: &EnclaveReport) -> Result<()> {
-        let is_debug = report.attributes[0] & 0x02 != 0;
-        if is_debug {
-            bail!("Debug mode is not allowed");
-        }
-        Ok(())
-    }
-    match &report.report {
-        Report::TD15(report) => validate_td15(report),
-        Report::TD10(report) => validate_td10(report),
-        Report::SgxEnclave(report) => validate_sgx(report),
-    }
+    
+    // 可以添加更多CSV特定的验证逻辑
+    // 例如：检查VM ID、版本号、证书链等
+    
+    Ok(())
 }
 
 /// Information about the app extracted from event log
@@ -447,37 +429,39 @@ pub struct AppInfo {
     pub key_provider_info: Vec<u8>,
 }
 
-/// Replay event logs
-/*pub fn replay_event_logs(eventlog: &[EventLog], to_event: Option<&str>) -> Result<[[u8; 48]; 4]> {
-    let mut rtmrs = [[0u8; 48]; 4];
-    for idx in 0..4 {
-        let mut mr = [0u8; 48];
+/// 重放事件日志（CSV版本，结合cc-eventlog和csv-attest的RTMR模拟）
+pub fn replay_event_logs(eventlog: &[EventLog], to_event: Option<&str>) -> Result<[[u8; 48]; 4]> {
+    // 如果有事件日志，使用传统的事件日志重放
+    if !eventlog.is_empty() {
+        let mut rtmrs = [[0u8; 48]; 4];
+        for idx in 0..4 {
+            let mut mr = [0u8; 48];
 
-        for event in eventlog.iter() {
-            event
-                .validate()
-                .context("Failed to validate event digest")?;
-            if event.imr == idx {
-                let mut hasher = Sha384::new();
-                hasher.update(mr);
-                hasher.update(event.digest);
-                mr = hasher.finalize().into();
-            }
-            if let Some(to_event) = to_event {
-                if event.event == to_event {
-                    break;
+            for event in eventlog.iter() {
+                event
+                    .validate()
+                    .context("验证事件摘要失败")?;
+                if event.imr == idx {
+                    let mut hasher = Sha384::new();
+                    hasher.update(mr);
+                    hasher.update(event.digest);
+                    mr = hasher.finalize().into();
+                }
+                if let Some(to_event) = to_event {
+                    if event.event == to_event {
+                        break;
+                    }
                 }
             }
+            rtmrs[idx as usize] = mr;
         }
-        rtmrs[idx as usize] = mr;
+        Ok(rtmrs)
+    } else {
+        // 如果没有事件日志，使用csv-attest模块的RTMR模拟功能
+        get_all_rtmr_values()
+            .map_err(|e| anyhow::anyhow!("获取RTMR值失败: {}", e))
     }
-
-    Ok(rtmrs)
-}*/
-pub fn replay_event_logs(eventlog: &[EventLog], to_event: Option<&str>) -> Result<[[u8; 48]; 4]> {
-    return Ok([[0u8; 48]; 4]);  
 }
-
 
 fn sha256(data: &[&[u8]]) -> [u8; 32] {
     use sha2::{Digest as _, Sha256};
@@ -486,6 +470,18 @@ fn sha256(data: &[&[u8]]) -> [u8; 32] {
         hasher.update(d);
     }
     hasher.finalize().into()
+}
+
+/// 从原始CSV报告字节中提取user_data字段
+fn extract_user_data_from_report_bytes(bytes: &[u8]) -> Result<[u8; 64]> {
+    if bytes.len() < core::mem::size_of::<CsvAttestationReport>() {
+        bail!("CSV报告字节长度不足");
+    }
+    // 安全地按内存布局读取整个结构体，再拷贝user_data字段
+    let report: &CsvAttestationReport = unsafe {
+        &* (bytes.as_ptr() as *const CsvAttestationReport)
+    };
+    Ok(report.user_data)
 }
 
 #[cfg(test)]

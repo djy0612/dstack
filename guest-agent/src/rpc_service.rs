@@ -23,7 +23,8 @@ use rcgen::KeyPair;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde_json::json;
 use sha3::{Digest, Keccak256};
-use tdx_attest::eventlog::read_event_logs;
+use csv_attest::CsvAttestationClient;
+use cc_eventlog::read_event_logs;
 
 use crate::config::Config;
 
@@ -214,8 +215,23 @@ impl DstackGuestRpc for InternalRpcHandler {
         if self.state.config().simulator.enabled {
             return simulate_quote(self.state.config(), report_data);
         }
-        let (_, quote) =
-            tdx_attest::get_quote(&report_data, None).context("Failed to get quote")?;
+        // 获取 CSV 报告（原始字节）
+        let mut client = CsvAttestationClient::new();
+        client.generate_nonce().context("Failed to generate nonce")?;
+        let report = client
+            .get_attestation_report_ioctl()
+            .or_else(|_| client.get_attestation_report_vmmcall())
+            .context("Failed to get CSV attestation report")?;
+        let size = core::mem::size_of_val(&report);
+        let mut quote = Vec::with_capacity(size);
+        unsafe {
+            quote.set_len(size);
+            core::ptr::copy_nonoverlapping(
+                &report as *const _ as *const u8,
+                quote.as_mut_ptr(),
+                size,
+            );
+        }
         let event_log = read_event_logs().context("Failed to decode event log")?;
         let event_log =
             serde_json::to_string(&event_log).context("Failed to serialize event log")?;
@@ -230,7 +246,12 @@ impl DstackGuestRpc for InternalRpcHandler {
         if self.state.config().simulator.enabled {
             return Ok(());
         }
-        tdx_attest::extend_rtmr3(&request.event, &request.payload)
+        Ok(csv_attest::extend_rtmr(3, 0, {
+            let mut extend = [0u8; csv_attest::RTMR_SIZE];
+            let copy_len = core::cmp::min(csv_attest::RTMR_SIZE, request.payload.len());
+            extend[..copy_len].copy_from_slice(&request.payload[..copy_len]);
+            extend
+        })?)
     }
 
     async fn info(self) -> Result<AppInfo> {
@@ -343,8 +364,23 @@ impl TappdRpc for InternalRpcHandlerV0 {
         let event_log = read_event_logs().context("Failed to decode event log")?;
         let event_log =
             serde_json::to_string(&event_log).context("Failed to serialize event log")?;
-        let (_, quote) =
-            tdx_attest::get_quote(&report_data, None).context("Failed to get quote")?;
+        // CSV: 获取原始报告字节
+        let mut client = CsvAttestationClient::new();
+        client.generate_nonce().context("Failed to generate nonce")?;
+        let report = client
+            .get_attestation_report_ioctl()
+            .or_else(|_| client.get_attestation_report_vmmcall())
+            .context("Failed to get CSV attestation report")?;
+        let size = core::mem::size_of_val(&report);
+        let mut quote = Vec::with_capacity(size);
+        unsafe {
+            quote.set_len(size);
+            core::ptr::copy_nonoverlapping(
+                &report as *const _ as *const u8,
+                quote.as_mut_ptr(),
+                size,
+            );
+        }
         Ok(TdxQuoteResponse {
             quote,
             event_log,

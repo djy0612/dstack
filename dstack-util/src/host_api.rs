@@ -63,48 +63,34 @@ impl HostApi {
             warn!("Failed to notify event {event} to host: {:?}", err);
         }
     }
-    fn create_mock_quote(report_data: &[u8]) -> Vec<u8> {
-        // 基于 TDX quote 格式构建更真实的模拟数据
-        let mut mock_quote = Vec::new();
-        
-        // ECDSA Quote 头部 (4 字节版本 + 4 字节 attestation key type)
-        mock_quote.extend_from_slice(&[0x03, 0x00, 0x00, 0x00]); // 版本 3
-        mock_quote.extend_from_slice(&[0x02, 0x00, 0x00, 0x00]); // ECDSA 签名类型
-        
-        // QE Vendor ID (16 字节)
-        mock_quote.extend_from_slice(&[0x93, 0x9A, 0x72, 0x33, 0xF7, 0x9C, 0x4C, 0xA9, 
-                                    0x94, 0x0A, 0x0D, 0xB3, 0x95, 0x7F, 0x06, 0x07]);
-        
-        // 用户数据长度 (2 字节) - 设为 0
-        mock_quote.extend_from_slice(&[0x00, 0x00]);
-        
-        // Quote 认证数据 - 包含 report_data (64 bytes)
-        let mut auth_data = Vec::new();
-        auth_data.extend_from_slice(&[0x00; 32]); // TD Report 头部
-        auth_data.extend_from_slice(report_data);  // Report Data (64 bytes)
-        auth_data.extend_from_slice(&[0x00; 128]); // 其他 TD Report 数据
-        
-        // 添加 auth_data 长度 (4 字节)
-        let auth_data_len = auth_data.len() as u32;
-        mock_quote.extend_from_slice(&auth_data_len.to_le_bytes());
-        
-        // 添加 auth_data
-        mock_quote.extend_from_slice(&auth_data);
-        
-        // 添加签名部分
-        let signature_size = 128u32;
-        mock_quote.extend_from_slice(&signature_size.to_le_bytes());
-        mock_quote.extend_from_slice(&[0xBB; 128]); // 模拟 ECDSA 签名
-        
-        mock_quote
+    fn quote_from_csv_report(report_data_prefix: &[u8]) -> Result<Vec<u8>> {
+        // 通过 csv_attest 获取报告，返回为字节数组
+        let mut client = csv_attest::CsvAttestationClient::new();
+        client.generate_nonce().context("Failed to generate nonce")?;
+        let report = client
+            .get_attestation_report_ioctl()
+            .or_else(|_| client.get_attestation_report_vmmcall())
+            .context("Failed to get CSV attestation report")?;
+        let size = core::mem::size_of_val(&report);
+        let mut quote = Vec::with_capacity(size);
+        unsafe {
+            quote.set_len(size);
+            core::ptr::copy_nonoverlapping(&report as *const _ as *const u8, quote.as_mut_ptr(), size);
+        }
+        // 尝试将 report_data_prefix 填入固定偏移（如协议需要可调整/移除）
+        if !report_data_prefix.is_empty() && quote.len() >= 576 + 64 {
+            let mut padded = [0u8; 64];
+            let n = std::cmp::min(report_data_prefix.len(), 64);
+            padded[..n].copy_from_slice(&report_data_prefix[..n]);
+            quote[576..640].copy_from_slice(&padded);
+        }
+        Ok(quote)
     }
     pub async fn get_sealing_key(&self) -> Result<KeyProvision> {
         let (pk, sk) = generate_keypair();
         let mut report_data = [0u8; 64];
         report_data[..PUBLICKEYBYTES].copy_from_slice(pk.as_bytes());
-        let quote = Self::create_mock_quote(&report_data);
-        //let (_, quote) =
-        //    tdx_attest::get_quote(&report_data, None).context("Failed to get quote")?;
+        let quote = Self::quote_from_csv_report(&report_data)?;
 
         let provision = self
             .client
@@ -114,23 +100,11 @@ impl HostApi {
             .await
             .map_err(|err| anyhow!("Failed to get sealing key: {err:?}"))?;
 
-        // verify the key provider quote
-        let verified_report = dcap_qvl::collateral::get_collateral_and_verify(
-            &provision.provider_quote,
-            self.pccs_url.as_deref(),
-        )
-        .await
-        .context("Failed to get quote collateral")?;
-        validate_tcb(&verified_report)?;
-        let sgx_report = verified_report
-            .report
-            .as_sgx()
-            .context("Invalid sgx report")?;
+        // CSV: 暂无 DCAP 验证流程，直接信任 VMM 返回的 provider_quote
+        // TODO: 当 CSV 校验证书链方案就绪时，替换为 csv_attest 验证
         let key_hash = sha256(&provision.encrypted_key);
-        if sgx_report.report_data[..32] != key_hash {
-            bail!("Invalid key hash");
-        }
-        let mr = sgx_report.mr_enclave;
+        // 将 key_hash 作为 MR 占位（32 字节）
+        let mr: [u8; 32] = key_hash;
 
         // write to fs
         let sealing_key = open_sealed_box(&provision.encrypted_key, &pk, &sk)

@@ -157,7 +157,6 @@ async fn main() -> Result<()> {
         None
     };
     let proxy_config = config.proxy.clone();
-    let pccs_url = config.pccs_url.clone();
     let admin_enabled = config.admin.enabled;
     let state = main_service::Proxy::new(config, my_app_id).await?;
     info!("Starting background tasks");
@@ -185,7 +184,8 @@ async fn main() -> Result<()> {
             })
         }))
         .manage(state.clone());
-    let verifier = QuoteVerifier::new(pccs_url);
+    // CSV 验证不依赖 PCCS，传 None
+    let verifier = QuoteVerifier::new(None);
     rocket = rocket.manage(verifier);
     let main_srv = rocket.launch();
     let admin_srv = async move {

@@ -420,21 +420,17 @@ impl RpcHandler {
         use_boottime_mr: bool,
         vm_config: &str,
     ) -> Result<BootConfig> {
-        let report = att
-            .report
-            .report
-            .as_td10()
-            .context("Failed to decode TD report")?;
+        // CSV: 通过 att.decode_app_info 获取度量信息（CSV 无 TD 报告）
         let app_info = att.decode_app_info(use_boottime_mr)?;
         let vm_config: VmConfig =
             serde_json::from_str(vm_config).context("Failed to decode VM config")?;
         let os_image_hash = vm_config.os_image_hash.clone();
         let boot_info = BootInfo {
-            mrtd: report.mr_td.to_vec(),
-            rtmr0: report.rt_mr0.to_vec(),
-            rtmr1: report.rt_mr1.to_vec(),
-            rtmr2: report.rt_mr2.to_vec(),
-            rtmr3: report.rt_mr3.to_vec(),
+            mrtd: app_info.mrtd.to_vec(),
+            rtmr0: app_info.rtmr0.to_vec(),
+            rtmr1: app_info.rtmr1.to_vec(),
+            rtmr2: app_info.rtmr2.to_vec(),
+            rtmr3: app_info.rtmr3.to_vec(),
             mr_aggregated: app_info.mr_aggregated.to_vec(),
             os_image_hash: os_image_hash.clone(),
             mr_system: app_info.mr_system.to_vec(),
@@ -619,7 +615,7 @@ impl KmsRpc for RpcHandler {
             .context("Failed to verify csr signature")?;
         let attestation = Attestation::new(csr.quote.clone(), csr.event_log.clone())
             .context("Failed to create attestation from quote and event log")?
-            .verify_with_ra_pubkey(&csr.pubkey, self.state.config.pccs_url.as_deref())
+            .verify_with_ra_pubkey(&csr.pubkey, None)
             .await
             .context("Quote verification failed")?;
         let app_info = self

@@ -26,7 +26,8 @@ git-version.workspace = true
 ra-rpc = { workspace = true, features = ["client", "rocket"] }
 dstack-guest-agent-rpc.workspace = true
 ra-tls.workspace = true
-tdx-attest.workspace = true
+csv-attest.workspace = true
+cc-eventlog.workspace = true
 guest-api = { workspace = true, features = ["client"] }
 host-api = { workspace = true, features = ["client"] }
 sysinfo.workspace = true

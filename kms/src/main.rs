@@ -121,7 +121,6 @@ async fn main() -> Result<()> {
         info!("  /prpc/{method}");
     }
 
-    let pccs_url = config.pccs_url.clone();
     // 创建 KmsState 实例
     let state = main_service::KmsState::new(config).context("Failed to initialize KMS state")?;
     // 使用 figment 配置创建一个自定义的 rocket 实例
@@ -143,7 +142,8 @@ async fn main() -> Result<()> {
         )
         .manage(state);
     // 添加 QuoteVerifier 管理对象
-    let verifier = QuoteVerifier::new(pccs_url);
+    // CSV 验证不依赖 PCCS
+    let verifier = QuoteVerifier::new(None);
     rocket = rocket.manage(verifier);
 
     rocket

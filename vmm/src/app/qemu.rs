@@ -30,44 +30,44 @@ use supervisor_client::supervisor::{ProcessConfig, ProcessInfo};
 #[derive(Debug, Deserialize)]
 pub struct InstanceInfo {
     #[serde(default)]
-    pub instance_id: String,
+    pub instance_id: String,                // 实例 ID
     #[serde(default, with = "hex_bytes")]
-    pub app_id: Vec<u8>,
+    pub app_id: Vec<u8>,                    // 应用 ID
 }
-
-pub struct VmInfo {
-    pub manifest: Manifest,
-    pub workdir: PathBuf,
-    pub status: &'static str,
-    pub uptime: String,
-    pub exited_at: Option<String>,
-    pub instance_id: Option<String>,
-    pub boot_progress: String,
-    pub boot_error: String,
-    pub shutdown_progress: String,
-    pub image_version: String,
-    pub gateway_enabled: bool,
+//虚拟机信息
+pub struct VmInfo {                         
+    pub manifest: Manifest,                 // 配置清单
+    pub workdir: PathBuf,                   // 工作目录
+    pub status: &'static str,               // 运行状态
+    pub uptime: String,                     // 运行时间
+    pub exited_at: Option<String>,          // 退出时间
+    pub instance_id: Option<String>,        // 实例 ID
+    pub boot_progress: String,              // 启动进度
+    pub boot_error: String,                 // 启动错误信息 
+    pub shutdown_progress: String,          // 关闭进度
+    pub image_version: String,              // 镜像版本
+    pub gateway_enabled: bool,              // 网关启用状态
 }
-
+//虚拟机配置
 #[derive(Debug, Builder)]
 pub struct VmConfig {
-    pub manifest: Manifest,
-    pub image: Image,
-    pub cid: u32,
-    pub networking: Networking,
-    pub workdir: PathBuf,
-    pub gateway_enabled: bool,
+    pub manifest: Manifest,     // 配置清单
+    pub image: Image,           // 镜像信息
+    pub cid: u32,               // 虚拟机CID
+    pub networking: Networking, // 网络配置
+    pub workdir: PathBuf,       // 工作目录
+    pub gateway_enabled: bool,  // 网关状态
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct State {
-    started: bool,
+    started: bool,              // 是否已启动
 }
-
+// 创建虚拟磁盘
 fn create_hd(
-    image_file: impl AsRef<Path>,
-    backing_file: Option<impl AsRef<Path>>,
-    size: &str,
+    image_file: impl AsRef<Path>,           // 磁盘镜像文件路径
+    backing_file: Option<impl AsRef<Path>>, // 可选的后备文件,即基于基层镜像创建
+    size: &str,                             // 磁盘大小
 ) -> Result<()> {
     let mut command = Command::new("qemu-img");
     command.arg("create").arg("-f").arg("qcow2");
@@ -90,7 +90,9 @@ fn create_hd(
 }
 
 impl VmInfo {
+    // 将虚拟机信息转换为 gRPC 可传输的 Protobuf 格式
     pub fn to_pb(&self, gw: &GatewayConfig, brief: bool) -> pb::VmInfo {
+        // 网关配置; 是否简要模式（不包含详细配置）
         let workdir = VmWorkDir::new(&self.workdir);
         pb::VmInfo {
             id: self.manifest.id.clone(),
@@ -173,6 +175,7 @@ impl VmInfo {
 }
 
 impl VmState {
+    // 合并虚拟机配置、进程状态和工作目录信息，生成完整的虚拟机状态
     pub fn merged_info(&self, proc_state: Option<&ProcessInfo>, workdir: &VmWorkDir) -> VmInfo {
         fn truncate(d: Duration) -> Duration {
             Duration::from_secs(d.as_secs())
@@ -218,16 +221,21 @@ impl VmState {
 }
 
 impl VmConfig {
+    // 根据虚拟机配置生成完整的 QEMU 命令行参数
     pub fn config_qemu(
         &self,
         workdir: impl AsRef<Path>,
         cfg: &CvmConfig,
         gpus: &GpuConfig,
     ) -> Result<ProcessConfig> {
+        // 创建工作目录管理器
         let workdir = VmWorkDir::new(workdir);
+        // 设置串口日志文件路径
         let serial_file = workdir.serial_file();
         let serial_pty = workdir.serial_pty();
+        // 创建共享目录
         let shared_dir = workdir.shared_dir();
+        // 硬盘镜像创建
         let disk_size = format!("{}G", self.manifest.disk_size);
         let hda_path = workdir.hda_path();
         if !hda_path.exists() {
@@ -240,6 +248,7 @@ impl VmConfig {
         if !shared_dir.exists() {
             fs::create_dir_all(&shared_dir)?;
         }
+        // QEMU 基础配置
         let qemu = &cfg.qemu_path;
         let mut smp = self.manifest.vcpu.max(1);
         let mut mem = self.manifest.memory;
@@ -248,6 +257,7 @@ impl VmConfig {
         command.arg("-cpu").arg("host");
         command.arg("-nographic");
         command.arg("-nodefaults");
+        // 串口和监控配置
         command.arg("-chardev").arg(format!(
             "pty,id=com0,path={},logfile={}",
             serial_pty.display(),
@@ -263,8 +273,10 @@ impl VmConfig {
         if let Some(bios) = &self.image.bios {
             command.arg("-bios").arg(bios);
         }
+        // 启动配置
         command.arg("-kernel").arg(&self.image.kernel);
         command.arg("-initrd").arg(&self.image.initrd);
+        // 根文件系统处理
         if let Some(rootfs) = &self.image.rootfs {
             let ext = rootfs
                 .extension()
@@ -287,11 +299,13 @@ impl VmConfig {
                 }
             }
         }
+        // 存储配置
         command
             .arg("-drive")
             .arg(format!("file={},if=none,id=hd1", hda_path.display()))
             .arg("-device")
             .arg("virtio-blk-pci,drive=hd1");
+        // 网络配置
         let netdev = match &self.networking {
             Networking::User(netcfg) => {
                 let mut netdev = format!(
@@ -316,13 +330,13 @@ impl VmConfig {
         command.arg("-netdev").arg(netdev);
         command.arg("-device").arg("virtio-net-pci,netdev=net0");
 
-        command
-            .arg("-machine")
-            //.arg("q35,kernel-irqchip=split,confidential-guest-support=tdx,hpet=off");
-            .arg("q35,kernel-irqchip=split,hpet=off");
+        
+        command.arg("-object").arg("sev-guest,id=sev0,policy=0x1,cbitpos=47,reduced-phys-bits=5");
+        command.arg("-machine").arg("q35,kernel-irqchip=split,hpet=off,memory-encryption=sev0");
 
         let img_ver = self.image.info.version_tuple().unwrap_or_default();
         let support_mr_config_id = img_ver >= (0, 5, 2);
+        // TDX 机密计算支持
         let tdx_object = if cfg.use_mrconfigid && support_mr_config_id {
             let app_compose = workdir.app_compose().context("Failed to get app compose")?;
             let compose_hash = workdir
@@ -369,6 +383,7 @@ impl VmConfig {
         } else {
             "off"
         };
+        // 虚拟文件系统
         command.arg("-virtfs").arg(format!(
             "local,path={},mount_tag=host-shared,readonly={ro},security_model=mapped,id=virtfs0",
             shared_dir.display(),
@@ -379,7 +394,7 @@ impl VmConfig {
         // Handle GPU configuration
         let mut dev_num = 1;
         let memory = self.manifest.memory;
-
+        // 大页内存 + NUMA 优化
         // Handle hugepages configuration
         if hugepages && !gpus.gpus.is_empty() {
             // Create a map of NUMA nodes to count of GPUs on that node
@@ -427,7 +442,7 @@ impl VmConfig {
                 bus_nr += count + 1;
             }
         }
-
+        // GPU 直通配置
         // Configure GPU devices
         if !gpus.gpus.is_empty() {
             // Add iommufd object
@@ -506,7 +521,7 @@ impl VmConfig {
         let stderr_path = workdir.stderr_file();
 
         let workdir = workdir.path();
-
+        // 进程配置生成
         let mut cmd_args = vec![];
         cmd_args.push(qemu.to_string_lossy().to_string());
         cmd_args.extend(args);
@@ -546,6 +561,7 @@ impl VmConfig {
 
 /// Round up a value to the nearest multiple of another value.
 /// If the value is already a multiple, it remains unchanged.
+// 向上取整到最近倍数,确保 CPU 核心数和内存大小是 NUMA 节点数的整数倍
 fn round_up(value: u32, multiple: u32) -> u32 {
     if multiple <= 1 {
         return value;
@@ -560,6 +576,7 @@ fn round_up(value: u32, multiple: u32) -> u32 {
 }
 
 /// Get the NUMA node associated with a PCI device.
+// 查找 PCI 设备的 NUMA 节点
 fn find_numa_node(device: &str) -> Result<String> {
     // Ensure the device string only contains valid hexadecimal characters and colons
     if !device
@@ -582,7 +599,7 @@ fn find_numa_node(device: &str) -> Result<String> {
 
     Ok(numa_node)
 }
-
+// 获取 NUMA 节点和 CPU 列表
 fn find_numa(device: Option<String>) -> Result<(String, String)> {
     let numa_node = match device {
         Some(device) => find_numa_node(&device)?,
@@ -596,7 +613,7 @@ fn find_numa(device: Option<String>) -> Result<(String, String)> {
         .to_string();
     Ok((numa_node, cpus))
 }
-
+// 虚拟机工作目录管理,统一管理虚拟机相关文件的路径
 pub struct VmWorkDir {
     workdir: PathBuf,
 }

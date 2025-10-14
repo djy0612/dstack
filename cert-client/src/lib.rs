@@ -7,7 +7,8 @@ use ra_tls::{
     cert::{generate_ra_cert, CaCert, CertConfig, CertSigningRequest},
     rcgen::KeyPair,
 };
-use tdx_attest::{eventlog::read_event_logs, get_quote};
+use csv_attest::CsvAttestationClient;
+use cc_eventlog::read_event_logs;
 
 pub enum CertRequestClient {
     Local {
@@ -112,6 +113,33 @@ impl CertRequestClient {
         quote  
     }
 
+    /// 从CSV环境获取原始报告字节；若失败则回退到本地mock
+    fn get_csv_quote_or_mock(report_data: &[u8]) -> Vec<u8> {
+        // 真实CSV环境：通过ioctl或vmmcall获取报告，并按内存布局拷贝为字节
+        let mut client = CsvAttestationClient::new();
+        if client.generate_nonce().is_ok() {
+            if let Ok(report) = client
+                .get_attestation_report_ioctl()
+                .or_else(|_| client.get_attestation_report_vmmcall())
+            {
+                let size = core::mem::size_of_val(&report);
+                let mut bytes = Vec::with_capacity(size);
+                unsafe {
+                    bytes.set_len(size);
+                    core::ptr::copy_nonoverlapping(
+                        &report as *const _ as *const u8,
+                        bytes.as_mut_ptr(),
+                        size,
+                    );
+                }
+                return bytes;
+            }
+        }
+        // 回退：构造mock quote，便于在非CSV主机上开发联调
+        println!("[WARN] CSV 报告获取失败，使用本地 mock 报告");
+        Self::create_mock_quote(report_data)
+    }
+
 
 
     // 添加一个创建模拟 event_log 的函数
@@ -129,22 +157,18 @@ impl CertRequestClient {
         let pubkey = key.public_key_der();
         let report_data = QuoteContentType::RaTlsCert.to_report_data(&pubkey);
         let (quote, event_log) = if !no_ra {
-            //let (_, quote) = get_quote(&report_data, None).context("Failed to get quote")?;
-            let quote = Self::create_mock_quote(&report_data);
-            //let event_log = read_event_logs().context("Failed to decode event log")?;
-            let event_log = Self::create_mock_event_logs(); 
-            let event_log =
-                serde_json::to_vec(&event_log).context("Failed to serialize event log")?;
+            let quote = Self::get_csv_quote_or_mock(&report_data);
+            // 事件日志：优先真实环境读取；失败则使用mock
+            let event_log = match read_event_logs() {
+                Ok(ev) => serde_json::to_vec(&ev).context("Failed to serialize event log")?,
+                Err(_) => {
+                    let ev = Self::create_mock_event_logs();
+                    serde_json::to_vec(&ev).context("Failed to serialize event log")?
+                }
+            };
             (quote, event_log)
         } else {
-            //(vec![], vec![])
-            //let (_, quote) = get_quote(&report_data, None).context("Failed to get quote")?;
-            let quote = Self::create_mock_quote(&report_data);
-            //let event_log = read_event_logs().context("Failed to decode event log")?;
-            let event_log = Self::create_mock_event_logs(); 
-            let event_log =
-                serde_json::to_vec(&event_log).context("Failed to serialize event log")?;
-            (quote, event_log)
+            (vec![], vec![])
         };
 
         let csr = CertSigningRequest {

@@ -26,7 +26,7 @@ echo "Syncing system time..."
 chronyc makestep
 
 #注释
-#modprobe tdx-guest
+modprobe csv-guest
 
 # Setup dstack system
 echo "Preparing dstack system..."

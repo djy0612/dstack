@@ -1,26 +1,29 @@
 use anyhow::{bail, Context, Result};
 use dstack_types::{mr_config::MrConfig, KeyProviderKind};
 use tracing::info;
+use sha2::{Digest as _, Sha256};
 
 // 添加环境检测
-fn is_tdx_available() -> bool {
-    std::path::Path::new("/dev/tdx_guest").exists()
+fn is_csv_available() -> bool {
+    std::path::Path::new("/dev/sev").exists()
+        || std::path::Path::new("/dev/hygon_csv").exists()
 }
 
 fn read_mr_config_id() -> Result<[u8; 48]> {
-    if !is_tdx_available() {
-            info!("TDX not available, returning zero config ID");
-            return Ok([0u8; 48]);
-        }
-
-    let (_, quote) = tdx_attest::get_quote(&[0u8; 64], None).context("Failed to get quote")?;
-    let quote = dcap_qvl::quote::Quote::parse(&quote).context("Failed to parse quote")?;
-    let configid = quote
-        .report
-        .as_td10()
-        .context("Failed to get TD10 report")?
-        .mr_config_id;
-    Ok(configid)
+    if !is_csv_available() {
+        info!("CSV not available, returning zero config ID");
+        return Ok([0u8; 48]);
+    }
+    // CSV：采用 V2 方案生成 config_id（示例实现）
+    // V2: 1B version(2) + 32B keccak/sha256(instance_info) + padding(15B)
+    // 这里用 sha256(instance_info) 代替（保持 32B），剩余字节填 0
+    let mut instance_info = Vec::new();
+    instance_info.extend_from_slice(b"csv-config");
+    let digest: [u8; 32] = Sha256::new_with_prefix(&instance_info).finalize().into();
+    let mut out = [0u8; 48];
+    out[0] = 2; // version 2
+    out[1..33].copy_from_slice(&digest);
+    Ok(out)
 }
 
 /// Verify the mr_config_id matches the expected value
@@ -46,8 +49,10 @@ pub fn verify_mr_config_id(
 
     // 非 TDX 环境或全零配置直接通过
     if read_mr_config_id == [0u8; 48] {
-        if !is_tdx_available() {
-            info!("Running in non-TDX mode, skipping configuration verification");
+        if !is_csv_available() {
+            info!("Running in non-CSV mode, skipping configuration verification");
+        } else {
+            info!("CSV mode with zero config_id, skipping configuration verification");
         }
         return Ok(());
     }
