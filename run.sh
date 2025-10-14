@@ -8,18 +8,17 @@ VCPUS=$(jq -r '.vcpu' ${VMDIR}/vm-manifest.json)
 
 VDA=${VMDIR}/hda.img
 
-PROCESS_NAME=qemu
+PROCESS_NAME=csv-vm
 
 INITRD=${IMAGE_PATH}/$(jq -r '.initrd' ${IMG_METADATA})
 KERNEL=${IMAGE_PATH}/$(jq -r '.kernel' ${IMG_METADATA})
 CDROM=${IMAGE_PATH}/$(jq -r '.rootfs' ${IMG_METADATA})
-TDVF_FIRMWARE=${IMAGE_PATH}/$(jq -r '.bios' ${IMG_METADATA})
+CSV_FIRMWARE=${IMAGE_PATH}/$(jq -r '.bios' ${IMG_METADATA})
 CMDLINE=$(jq -r '.cmdline' ${IMG_METADATA})
 CONFIG_DIR=${VMDIR}/shared
-TD=${TD:-1}
-#TD=${TD:0}  # 设置 TD 为 0，表示不使用 TDX
+CSV=${CSV:-1}
+#CSV=${CSV:0}  # 设置 CSV 为 0，表示不使用 CSV
 RO=${RO:-on}
-CID=$(( ( RANDOM % 10000 )  + 3 ))
 
 ARGS="${ARGS} -kernel ${KERNEL}"
 ARGS="${ARGS} -initrd ${INITRD}"
@@ -28,26 +27,26 @@ echo INITRD=${INITRD}
 echo ARGS=${ARGS}
 echo VDA=${VDA}
 echo CMDLINE=${CMDLINE}
-echo TD=${TD}
+echo CSV=${CSV}
 
-if [ "${TD}" == "1" ]; then
-	MACHINE_ARGS=",confidential-guest-support=tdx,hpet=off"
-	PROCESS_NAME=td
-	#TDX_ARGS="-device vhost-vsock-pci,guest-cid=${CID} -object tdx-guest,id=tdx"
-	TDX_ARGS="-device vhost-vsock-pci,guest-cid=${CID}"
+if [ "${CSV}" == "1" ]; then
+	MACHINE_ARGS=",memory-encryption=sev0"
+	PROCESS_NAME=csv-vm
+	# CSV/SEV 参数配置
+	CSV_ARGS="-object sev-guest,id=sev0,policy=0x1,cbitpos=47,reduced-phys-bits=5"
 fi
-BIOS="-bios ${TDVF_FIRMWARE}"
+BIOS="-bios ${CSV_FIRMWARE}"
 
 sleep 2
 
 qemu-system-x86_64 \
-		   -accel kvm \
+		   --enable-kvm \
+		   -cpu host \
 		   -m ${MEM}M -smp ${VCPUS} \
 		   -name ${PROCESS_NAME},process=${PROCESS_NAME},debug-threads=on \
-		   -cpu host \
 		   -machine q35,kernel_irqchip=split${MACHINE_ARGS} \
 		   ${BIOS} \
-		   ${TDX_ARGS} \
+		   ${CSV_ARGS} \
 		   -nographic \
 		   -nodefaults \
 		   -chardev stdio,id=ser0,signal=on -serial chardev:ser0 \
