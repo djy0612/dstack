@@ -14,6 +14,8 @@ members = [
     "ra-tls",
     "tdx-attest-sys",
     "tdx-attest",
+    "csv-attest-sys",  
+    "csv-attest",      
     "dstack-util",
     "iohash",
     "guest-agent",
@@ -56,6 +58,8 @@ supervisor = { path = "supervisor" }
 supervisor-client = { path = "supervisor/client" }
 tdx-attest = { path = "tdx-attest" }
 tdx-attest-sys = { path = "tdx-attest-sys" }
+csv-attest = { path = "csv-attest" }        
+csv-attest-sys = { path = "csv-attest-sys" } 
 certbot = { path = "certbot" }
 rocket-vsock-listener = { path = "rocket-vsock-listener" }
 host-api = { path = "host-api", default-features = false }

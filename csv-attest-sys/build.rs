@@ -23,8 +23,8 @@ fn main() {
     // 链接 GMSSL 库
     if Path::new("/opt/gmssl/lib").exists() {
         println!("cargo:rustc-link-search=native=/opt/gmssl/lib");
-        println!("cargo:rustc-link-lib=crypto");
-        println!("cargo:rustc-link-lib=ssl");
+        println!("cargo:rustc-link-lib=static=crypto");
+        println!("cargo:rustc-link-lib=static=ssl");
     }
     
     // 链接系统库
