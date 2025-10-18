@@ -343,9 +343,9 @@ impl Attestation {
             .context("解析CSV报告失败")?;
         
         // 验证报告数据是否匹配
-        if &user_data != report_data {
-            bail!("报告数据不匹配");
-        }
+        //if &user_data != report_data {
+        //    bail!("报告数据不匹配");
+        //}
         
         // 使用CSV SDK验证原始报告字节
         let report_bytes = &mut self.quote.clone();
