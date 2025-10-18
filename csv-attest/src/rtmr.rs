@@ -16,22 +16,6 @@ pub const RTMR_SIZE: usize = 48;
 /// 模拟的 RTMR 寄存器值
 pub type RtmrValue = [u8; RTMR_SIZE];
 
-/// RTMR 扩展事件
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RtmrExtendEvent {
-    /// RTMR 索引 (0-3)
-    pub rtmr_index: u32,
-    /// 事件类型
-    pub event_type: u32,
-    /// 扩展数据
-    #[serde(with = "serde_human_bytes")]
-    pub extend_data: [u8; RTMR_SIZE],
-    /// 事件名称
-    pub event_name: String,
-    /// 事件载荷
-    #[serde(with = "serde_human_bytes")]
-    pub event_payload: Vec<u8>,
-}
 
 /// RTMR 管理器
 pub struct RtmrManager {
@@ -39,8 +23,6 @@ pub struct RtmrManager {
     rtmr_values: [RtmrValue; RTMR_COUNT],
     /// RTMR 历史文件路径
     rtmr_file: String,
-    /// 事件日志文件路径
-    event_log_file: String,
 }
 
 impl RtmrManager {
@@ -49,16 +31,6 @@ impl RtmrManager {
         Self {
             rtmr_values: [[0u8; RTMR_SIZE]; RTMR_COUNT],
             rtmr_file: "/run/log/csv_rtmr/rtmr_values.json".to_string(),
-            event_log_file: "/run/log/csv_rtmr/rtmr_events.log".to_string(),
-        }
-    }
-
-    /// 创建新的 RTMR 管理器，使用自定义文件路径
-    pub fn with_paths(rtmr_file: String, event_log_file: String) -> Self {
-        Self {
-            rtmr_values: [[0u8; RTMR_SIZE]; RTMR_COUNT],
-            rtmr_file,
-            event_log_file,
         }
     }
 
@@ -118,13 +90,18 @@ impl RtmrManager {
         Ok(())
     }
 
-    /// 扩展 RTMR 寄存器
-    pub fn extend_rtmr(&mut self, index: u32, event_type: u32, extend_data: [u8; RTMR_SIZE]) -> Result<(), CsvAttestationError> {
+
+    /// 扩展 RTMR 寄存器（带事件名称和payload）
+    pub fn extend_rtmr_with_event(&mut self, index: u32, event_type: u32, event_name: &str, payload: &[u8]) -> Result<(), CsvAttestationError> {
         if index as usize >= RTMR_COUNT {
             return Err(CsvAttestationError::InvalidParameter(
                 format!("Invalid RTMR index: {}", index)
             ));
         }
+
+        // 创建 TdxEventLog 来计算 digest
+        let event_log = TdxEventLog::new(index, event_type, event_name.to_string(), payload.to_vec());
+        let extend_data = event_log.digest;
 
         // 计算新的 RTMR 值：SHA384(current_value || extend_data)
         let mut hasher = Sha384::new();
@@ -135,16 +112,8 @@ impl RtmrManager {
         // 更新 RTMR 值
         self.rtmr_values[index as usize] = new_value;
 
-        // 记录事件日志
-        let event = RtmrExtendEvent {
-            rtmr_index: index,
-            event_type,
-            extend_data,
-            event_name: format!("RTMR{}_EXTEND", index),
-            event_payload: extend_data.to_vec(),
-        };
-
-        self.log_rtmr_event(&event)?;
+        // 直接使用 cc_eventlog 记录事件日志
+        self.log_cc_event(&event_log)?;
 
         // 保存到文件
         self.save_to_file()?;
@@ -168,63 +137,59 @@ impl RtmrManager {
         self.rtmr_values
     }
 
-    /// 记录 RTMR 事件到日志文件
-    fn log_rtmr_event(&self, event: &RtmrExtendEvent) -> Result<(), CsvAttestationError> {
-        // 创建目录
-        if let Some(parent) = Path::new(&self.event_log_file).parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| {
-                    eprintln!("Failed to create directory {:?}: {}", parent, e);
-                    CsvAttestationError::Unknown(e.raw_os_error().unwrap_or(-1) as i32)
-                })?;
-        }
 
-        // 转换为 TdxEventLog 格式
-        let event_log = TdxEventLog::new(
-            event.rtmr_index,
-            event.event_type,
-            event.event_name.clone(),
-            event.event_payload.clone(),
-        );
-
-        // 序列化并写入文件
-        let log_line = serde_json::to_string(&event_log)
+    /// 直接使用 cc_eventlog 记录事件日志
+    fn log_cc_event(&self, event_log: &TdxEventLog) -> Result<(), CsvAttestationError> {
+        // Append to event log
+        let logline = serde_json::to_string(event_log)
             .map_err(|e| {
                 eprintln!("Failed to serialize event log: {}", e);
                 CsvAttestationError::VerificationFailed(format!("Failed to serialize event log: {}", e))
             })?;
 
-        let mut file = fs::OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(&self.event_log_file)
+        let logfile_path = std::path::Path::new(cc_eventlog::RUNTIME_EVENT_LOG_FILE);
+        let logfile_dir = logfile_path
+            .parent()
+            .ok_or_else(|| CsvAttestationError::VerificationFailed("Failed to get event log directory".to_string()))?;
+        fs::create_dir_all(logfile_dir)
             .map_err(|e| {
-                eprintln!("Failed to open event log file {:?}: {}", self.event_log_file, e);
+                eprintln!("Failed to create event log directory: {}", e);
                 CsvAttestationError::Unknown(e.raw_os_error().unwrap_or(-1) as i32)
             })?;
 
+        let mut logfile = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(logfile_path)
+            .map_err(|e| {
+                eprintln!("Failed to open event log file: {}", e);
+                CsvAttestationError::Unknown(e.raw_os_error().unwrap_or(-1) as i32)
+            })?;
+        
         use std::io::Write;
-        file.write_all(log_line.as_bytes())
+        logfile
+            .write_all(logline.as_bytes())
             .map_err(|e| {
                 eprintln!("Failed to write to event log file: {}", e);
                 CsvAttestationError::Unknown(e.raw_os_error().unwrap_or(-1) as i32)
             })?;
-        file.write_all(b"\n")
+        logfile
+            .write_all(b"\n")
             .map_err(|e| {
-                eprintln!("Failed to write newline to event log file: {}", e);
+                eprintln!("Failed to write to event log file: {}", e);
                 CsvAttestationError::Unknown(e.raw_os_error().unwrap_or(-1) as i32)
             })?;
-
         Ok(())
     }
 
     /// 读取 RTMR 事件日志
     pub fn read_rtmr_event_logs(&self) -> Result<Vec<TdxEventLog>, CsvAttestationError> {
-        if !Path::new(&self.event_log_file).exists() {
+        let logfile_path = std::path::Path::new(cc_eventlog::RUNTIME_EVENT_LOG_FILE);
+        if !logfile_path.exists() {
             return Ok(vec![]);
         }
 
-        let data = fs::read_to_string(&self.event_log_file)
+        let data = fs::read_to_string(logfile_path)
             .map_err(|e| CsvAttestationError::Unknown(e.raw_os_error().unwrap_or(-1) as i32))?;
 
         let mut event_logs = vec![];
@@ -269,11 +234,17 @@ impl Default for RtmrManager {
     }
 }
 
-/// 便捷函数：扩展 RTMR
-pub fn extend_rtmr(index: u32, event_type: u32, extend_data: [u8; RTMR_SIZE]) -> Result<(), CsvAttestationError> {
+
+/// 便捷函数：扩展 RTMR（带事件名称和payload）
+pub fn extend_rtmr_with_event(index: u32, event_type: u32, event_name: &str, payload: &[u8]) -> Result<(), CsvAttestationError> {
     let mut manager = RtmrManager::new();
     manager.load_from_file()?;
-    manager.extend_rtmr(index, event_type, extend_data)
+    manager.extend_rtmr_with_event(index, event_type, event_name, payload)
+}
+
+/// 便捷函数：扩展 RTMR3（类似 tdx_attest::extend_rtmr3）
+pub fn extend_rtmr3(event_name: &str, payload: &[u8]) -> Result<(), CsvAttestationError> {
+    extend_rtmr_with_event(3, 0x08000001, event_name, payload)
 }
 
 /// 便捷函数：获取 RTMR 值

@@ -246,12 +246,7 @@ impl DstackGuestRpc for InternalRpcHandler {
         if self.state.config().simulator.enabled {
             return Ok(());
         }
-        Ok(csv_attest::extend_rtmr(3, 0, {
-            let mut extend = [0u8; csv_attest::RTMR_SIZE];
-            let copy_len = core::cmp::min(csv_attest::RTMR_SIZE, request.payload.len());
-            extend[..copy_len].copy_from_slice(&request.payload[..copy_len]);
-            extend
-        })?)
+        Ok(csv_attest::extend_rtmr3(&request.event, &request.payload)?)
     }
 
     async fn info(self) -> Result<AppInfo> {

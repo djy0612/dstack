@@ -220,10 +220,7 @@ fn cmd_quote() -> Result<()> {
 
 fn cmd_extend(extend_args: ExtendArgs) -> Result<()> {
     let payload = hex::decode(&extend_args.payload).context("Failed to decode payload")?;
-    let mut extend = [0u8; att::RTMR_SIZE];
-    let copy_len = core::cmp::min(att::RTMR_SIZE, payload.len());
-    extend[..copy_len].copy_from_slice(&payload[..copy_len]);
-    att::extend_rtmr(3, 0, extend).context("Failed to extend RTMR")
+    att::rtmr::extend_rtmr3(&extend_args.event, &payload).context("Failed to extend RTMR")
 }
 
 fn cmd_report() -> Result<()> {
@@ -348,7 +345,7 @@ fn cmd_gen_ca_cert(args: GenCaCertArgs) -> Result<()> {
             size,
         );
     }
-    let event_logs = cc_eventlog::read_event_logs().context("Failed to read event logs")?;
+    let event_logs = cc_eventlog::read_event_logs().context("Failed to read event logs1")?;
     let event_log = serde_json::to_vec(&event_logs).context("Failed to serialize event logs")?;
 
     let req = CertRequest::builder()

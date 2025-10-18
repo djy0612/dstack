@@ -207,10 +207,7 @@ fn truncate(s: &[u8], len: usize) -> &[u8] {
 fn emit_key_provider_info(provider_info: &KeyProviderInfo) -> Result<()> {
     info!("Key provider info: {provider_info:?}");
     let provider_info_json = serde_json::to_vec(&provider_info)?;
-    let mut extend = [0u8; RTMR_SIZE];
-    let copy_len = core::cmp::min(RTMR_SIZE, provider_info_json.len());
-    extend[..copy_len].copy_from_slice(&provider_info_json[..copy_len]);
-    csv_attest::extend_rtmr(3, 0, extend)?;
+    csv_attest::rtmr::extend_rtmr3("key-provider", &provider_info_json)?;
     Ok(())
 }
 
@@ -329,10 +326,7 @@ impl<'a> Stage0<'a> {
                     let kms_info = att
                         .decode_app_info(false)
                         .context("Failed to decode app_info")?;
-                    let mut extend = [0u8; RTMR_SIZE];
-                    let n = 48.min(kms_info.mr_aggregated.len());
-                    extend[..n].copy_from_slice(&kms_info.mr_aggregated[..n]);
-                    csv_attest::extend_rtmr(3, 0, extend)
+                    csv_attest::rtmr::extend_rtmr3("mr-kms", &kms_info.mr_aggregated)
                         .context("Failed to extend mr-kms to RTMR3")?;
                 }
                 Ok(())
@@ -350,9 +344,9 @@ impl<'a> Stage0<'a> {
             })
             .await
             .context("Failed to get app key")?;
-        //info!("extend_rtmr3");    
-        //extend_rtmr3("os-image-hash", &response.os_image_hash)
-        //    .context("Failed to extend os-image-hash to RTMR3")?;
+        info!("extend_rtmr3");    
+        csv_attest::rtmr::extend_rtmr3("os-image-hash", &response.os_image_hash)
+            .context("Failed to extend os-image-hash to RTMR3")?;
 
         let (_, ca_pem) = x509_parser::pem::parse_x509_pem(tmp_ca.ca_cert.as_bytes())
             .context("Failed to parse ca cert")?;
@@ -520,27 +514,16 @@ impl<'a> Stage0<'a> {
         }
 
         // 写入关键事件到 RTMR3（CSV）
-        let mut extend = [0u8; RTMR_SIZE];
         // system-preparing
-        extend.fill(0);
-        csv_attest::extend_rtmr(3, 0, extend)?;
+        csv_attest::rtmr::extend_rtmr3("system-preparing", &[])?;
         // app-id
-        extend.fill(0);
-        extend[..core::cmp::min(RTMR_SIZE, instance_info.app_id.len())]
-            .copy_from_slice(&instance_info.app_id[..core::cmp::min(RTMR_SIZE, instance_info.app_id.len())]);
-        csv_attest::extend_rtmr(3, 0, extend)?;
-        // compose-hash（32B）
-        extend.fill(0);
-        extend[..32].copy_from_slice(&compose_hash);
-        csv_attest::extend_rtmr(3, 0, extend)?;
-        // instance-id（<=20B）
-        extend.fill(0);
-        extend[..core::cmp::min(RTMR_SIZE, instance_info.instance_id.len())]
-            .copy_from_slice(&instance_info.instance_id[..core::cmp::min(RTMR_SIZE, instance_info.instance_id.len())]);
-        csv_attest::extend_rtmr(3, 0, extend)?;
+        csv_attest::rtmr::extend_rtmr3("app-id", &instance_info.app_id)?;
+        // compose-hash
+        csv_attest::rtmr::extend_rtmr3("compose-hash", &compose_hash)?;
+        // instance-id
+        csv_attest::rtmr::extend_rtmr3("instance-id", &instance_info.instance_id)?;
         // boot-mr-done
-        extend.fill(0);
-        csv_attest::extend_rtmr(3, 0, extend)?;
+        csv_attest::rtmr::extend_rtmr3("boot-mr-done", &[])?;
         Ok(AppInfo {
             instance_info,
             compose_hash,
@@ -604,7 +587,7 @@ impl<'a> Stage0<'a> {
                 &serde_json::to_string(&app_info.instance_info)?,
             )
             .await;
-        //extend_rtmr3("system-ready", &[])?;
+        csv_attest::rtmr::extend_rtmr3("system-ready", &[])?;
         self.vmm.notify_q("boot.progress", "data disk ready").await;
 
         //if !self.shared.app_compose.key_provider().is_kms() {

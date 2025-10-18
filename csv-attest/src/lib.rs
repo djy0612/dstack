@@ -202,7 +202,7 @@ pub fn verify_attestation_report(report_data: &mut [u8], verify_chain: bool) -> 
 
 // 重新导出 RTMR 相关功能
 pub use rtmr::{
-    RtmrManager, RtmrValue, RtmrExtendEvent,
+    RtmrManager, RtmrValue,
     RTMR_COUNT, RTMR_SIZE,
-    extend_rtmr, get_rtmr_value, get_all_rtmr_values,
+    extend_rtmr3, get_rtmr_value, get_all_rtmr_values,
 };
