@@ -27,13 +27,13 @@ port = 8011
 enabled = false
 workdir = "/etc/certbot"
 acme_url = "https://acme-staging-v02.api.letsencrypt.org/directory"
-cf_api_token = ""
-cf_zone_id = ""
+cf_api_token = "oCUHQ2sCNpyWTSzALYQ53E3KYJi7"
+cf_zone_id = "a3bad3caa4af793a63e6c6c6a4d5353b"
 auto_set_caa = true
-domain = "*.example.com"
+domain = "*.020919.xyz"
 renew_interval = "1h"
 renew_before_expiration = "10d"
-renew_timeout = "120s"
+renew_timeout = "300s"
 
 [core.wg]
 public_key = ""
