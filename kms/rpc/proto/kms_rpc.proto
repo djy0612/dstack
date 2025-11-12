@@ -96,6 +96,22 @@ service KMS {
   rpc SignCert(SignCertRequest) returns (SignCertResponse);
   // Clear the image cache
   rpc ClearImageCache(ClearImageCacheRequest) returns (google.protobuf.Empty);
+  //新增kms的rpc服务
+  // Rotate root keys (CA key and k256 key)
+  rpc RotateRootKey(RotateRootKeyRequest) returns (RotateRootKeyResponse);
+}
+
+//添加两个message定义
+message RotateRootKeyRequest {
+  string token = 1; // 管理员令牌，用于验证权限
+  bool backup_old_keys = 2; // 是否备份旧密钥
+}
+
+message RotateRootKeyResponse {
+  bytes old_ca_pubkey = 1; // 旧CA公钥
+  bytes new_ca_pubkey = 2; // 新CA公钥
+  bytes old_k256_pubkey = 3; // 旧k256公钥
+  bytes new_k256_pubkey = 4; // 新k256公钥
 }
 
 message ClearImageCacheRequest {

@@ -9,7 +9,7 @@ use dstack_kms_rpc::{
     kms_server::{KmsRpc, KmsServer},
     AppId, AppKeyResponse, ClearImageCacheRequest, GetAppKeyRequest, GetKmsKeyRequest,
     GetMetaResponse, GetTempCaCertResponse, KmsKeyResponse, KmsKeys, PublicKeyResponse,
-    SignCertRequest, SignCertResponse,
+    RotateRootKeyRequest, RotateRootKeyResponse, SignCertRequest, SignCertResponse,
 };
 use dstack_types::VmConfig;
 use fs_err as fs;
@@ -19,13 +19,15 @@ use ra_tls::{
     attestation::VerifiedAttestation,
     cert::{CaCert, CertRequest, CertSigningRequest},
     kdf,
+    rcgen::{KeyPair, PKCS_ECDSA_P256_SHA256},
 };
 use scale::Decode;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use tokio::{io::AsyncWriteExt, process::Command};
-use tracing::info;
+use tracing::{info, warn};
 use upgrade_authority::BootInfo;
+use safe_write::safe_write;
 
 use crate::{
     config::KmsConfig,
@@ -642,6 +644,98 @@ impl KmsRpc for RpcHandler {
         self.remove_cache(&self.mr_cache_dir(), &request.config_hash)
             .context("Failed to clear MR cache")?;
         Ok(())
+    }
+
+    //在 impl kmsRpc for rpcHandler这个实现类里新增
+    // 轮换根密钥
+    // 
+    // 注意：轮换后需要重启 KMS 服务才能使用新密钥。
+    // 所有使用旧密钥的 VM 需要重新初始化或迁移。
+    async fn rotate_root_key(self, request: RotateRootKeyRequest) -> Result<RotateRootKeyResponse> {
+        // 验证管理员权限
+        self.ensure_admin(&request.token)?;
+
+        info!("Starting root key rotation");
+
+        // 保存旧密钥的公钥信息
+        let old_ca_pubkey = self.state.root_ca.key.public_key_der();
+        let old_k256_pubkey = self.state.k256_key.verifying_key().to_sec1_bytes().to_vec();
+
+        // 备份旧密钥（如果需要）
+        if request.backup_old_keys {
+            let backup_dir = self.state.config.cert_dir.join("backup");
+            fs::create_dir_all(&backup_dir)
+                .context("Failed to create backup directory")?;
+            
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            
+            // 备份旧密钥文件
+            if let Err(e) = fs::copy(
+                self.state.config.root_ca_key(),
+                backup_dir.join(format!("root-ca.key.backup.{}", timestamp)),
+            ) {
+                warn!("Failed to backup root CA key: {}", e);
+            }
+            if let Err(e) = fs::copy(
+                self.state.config.k256_key(),
+                backup_dir.join(format!("root-k256.key.backup.{}", timestamp)),
+            ) {
+                warn!("Failed to backup k256 key: {}", e);
+            }
+            info!("Old keys backed up to {:?}", backup_dir);
+        }
+
+        // 生成新的根密钥
+        let new_ca_key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256)
+            .context("Failed to generate new CA key")?;
+        let mut rng = rand::rngs::OsRng;
+        let new_k256_key = SigningKey::random(&mut rng);
+
+        // 生成新的根CA证书
+        let new_ca_cert = CertRequest::builder()
+            .org_name("Dstack")
+            .subject("Dstack KMS CA")
+            .ca_level(1)
+            .key(&new_ca_key)
+            .build()
+            .self_signed()
+            .context("Failed to generate new CA certificate")?;
+
+        // 保存新密钥到文件
+        safe_write(
+            &self.state.config.root_ca_key(),
+            new_ca_key.serialize_pem(),
+        )
+        .context("Failed to write new root CA key")?;
+
+        safe_write(
+            &self.state.config.root_ca_cert(),
+            new_ca_cert.pem(),
+        )
+        .context("Failed to write new root CA certificate")?;
+
+        safe_write(
+            &self.state.config.k256_key(),
+            new_k256_key.to_bytes(),
+        )
+        .context("Failed to write new k256 key")?;
+
+        // 获取新密钥的公钥
+        let new_ca_pubkey = new_ca_key.public_key_der();
+        let new_k256_pubkey = new_k256_key.verifying_key().to_sec1_bytes().to_vec();
+
+        info!("Root keys rotated successfully");
+        warn!("⚠️  IMPORTANT: After root key rotation, all existing VMs using the old keys will need to be re-initialized or migrated!");
+
+        Ok(RotateRootKeyResponse {
+            old_ca_pubkey: old_ca_pubkey.to_vec(),
+            new_ca_pubkey: new_ca_pubkey.to_vec(),
+            old_k256_pubkey,
+            new_k256_pubkey,
+        })
     }
 }
 
