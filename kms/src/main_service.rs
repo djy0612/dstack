@@ -189,6 +189,10 @@ impl RpcHandler {
     }
     // 验证提供的管理令牌是否有效
     fn ensure_admin(&self, token: &str) -> Result<()> {
+        if self.state.config.auth_api.is_dev() && token.is_empty() {
+            warn!("Admin token skipped in dev mode; **DO NOT** keep this in production");
+            return Ok(());
+        }
         let token_hash = sha2::Sha256::new_with_prefix(token).finalize();
         if token_hash.as_slice() != self.state.config.admin_token_hash.as_slice() {
             bail!("Invalid token");
