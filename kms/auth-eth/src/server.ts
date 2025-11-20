@@ -18,10 +18,10 @@ export async function build(): Promise<FastifyInstance> {
   server.addSchema({
     $id: 'bootInfo',
     type: 'object',
-    required: ['mrAggregated', 'osImageHash', 'appId', 'composeHash', 'instanceId', 'deviceId'],
+    required: ['mrAggregated', 'mrImage', 'appId', 'composeHash', 'instanceId', 'deviceId'],
     properties: {
       mrAggregated: { type: 'string', description: 'Aggregated MR measurement' },
-      osImageHash: { type: 'string', description: 'OS Image hash' },
+      mrImage: { type: 'string', description: 'MR Image measurement' },
       appId: { type: 'string', description: 'Application ID' },
       composeHash: { type: 'string', description: 'Compose hash' },
       instanceId: { type: 'string', description: 'Instance ID' },
@@ -45,23 +45,8 @@ export async function build(): Promise<FastifyInstance> {
   const kmsContractAddr = process.env.KMS_CONTRACT_ADDR || '0x0000000000000000000000000000000000000000';
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   server.decorate('ethereum', new EthereumBackend(provider, kmsContractAddr));
-  // 检查服务状态
-  server.get('/', async (request, reply) => {
-    const batch = await Promise.all([
-      server.ethereum.getGatewayAppId(),
-      server.ethereum.getChainId(),
-      server.ethereum.getAppAuthImplementation(),
-    ]);
-    return {
-      status: 'ok',
-      kmsContractAddr: kmsContractAddr,
-      gatewayAppId: batch[0],
-      chainId: batch[1],
-      appAuthImplementation: batch[2],
-    };
-  });
 
-  // 验证应用程序是否被授权启动
+  // Define routes
   server.post<{
     Body: BootInfo;
     Reply: BootResponse;
@@ -76,7 +61,6 @@ export async function build(): Promise<FastifyInstance> {
     try {
       return await server.ethereum.checkBoot(request.body, false);
     } catch (error) {
-      console.error(error);
       reply.code(200).send({
         isAllowed: false,
         gatewayAppId: '',
@@ -84,7 +68,7 @@ export async function build(): Promise<FastifyInstance> {
       });
     }
   });
-  // 验证 KMS 实例是否被授权启动
+
   server.post<{
     Body: BootInfo;
     Reply: BootResponse;
@@ -99,7 +83,6 @@ export async function build(): Promise<FastifyInstance> {
     try {
       return await server.ethereum.checkBoot(request.body, true);
     } catch (error) {
-      console.error(error);
       reply.code(200).send({
         isAllowed: false,
         gatewayAppId: '',

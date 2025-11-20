@@ -21,22 +21,12 @@ beforeAll(async () => {
   const [owner] = await ethers.getSigners();
 
   // Deploy contracts
-  const kmsAuth = await deployContract(hre, "KmsAuth", [
-    owner.address, 
-    ethers.ZeroAddress  // _appAuthImplementation (can be set to zero for tests)
-  ], true) as KmsAuth;
+  const kmsAuth = await deployContract(hre, "KmsAuth", [owner.address], true) as KmsAuth;
 
   // Initialize the contract with an app and KMS info
   const appId = await kmsAuth.nextAppId();
 
-  const appAuth = await deployContract(hre, "AppAuth", [
-    owner.address, 
-    appId, 
-    false,  // _disableUpgrades
-    true,   // _allowAnyDevice
-    ethers.ZeroHash,  // initialDeviceId (empty)
-    ethers.ZeroHash   // initialComposeHash (empty)
-  ], true) as AppAuth;
+  const appAuth = await deployContract(hre, "AppAuth", [owner.address, appId, false, true], true) as AppAuth;
 
   await kmsAuth.registerApp(await appAuth.getAddress());
 
@@ -55,14 +45,15 @@ beforeAll(async () => {
     deviceId: ethers.encodeBytes32String("test-device-id"),
     mrSystem: ethers.encodeBytes32String("test-mr-system"),
     mrAggregated: ethers.encodeBytes32String("test-mr-aggregated"),
-    osImageHash: ethers.encodeBytes32String("test-os-image-hash"),
+    mrImage: ethers.encodeBytes32String("test-mr-image"),
     tcbStatus: "UpToDate",
     advisoryIds: []
   };
   // Register some test enclaves and images
   await kmsAuth.addKmsAggregatedMr(ethers.encodeBytes32String("11"));
-  await kmsAuth.addOsImageHash(ethers.encodeBytes32String("22"));
+  await kmsAuth.addAppImageMr(ethers.encodeBytes32String("22"));
   await appAuth.addComposeHash(ethers.encodeBytes32String("33"));
+  await kmsAuth.addAppSystemMr(ethers.encodeBytes32String("44"));
 
   // Set up global test contracts
   global.testContracts = {

@@ -5,54 +5,50 @@ import "./IAppAuth.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeable.sol";
-import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract KmsAuth is
     Initializable,
     OwnableUpgradeable,
     UUPSUpgradeable,
-    ERC165Upgradeable,
     IAppAuth
 {
     // Struct for KMS information
     struct KmsInfo {
-        bytes k256Pubkey;// K256 公钥
-        bytes caPubkey;// CA 公钥
-        bytes quote;// 硬件证明报告
-        bytes eventlog;// 事件日志
+        bytes k256Pubkey;
+        bytes caPubkey;
+        bytes quote;
+        bytes eventlog;
     }
 
     // KMS information
     KmsInfo public kmsInfo;
 
     // The dstack-gateway App ID
-    /// @custom:oz-renamed-from tproxyAppId
     string public gatewayAppId;
 
     // Struct to store App configuration
     struct AppConfig {
-        bool isRegistered;// 是否已注册
-        address controller;// 控制器地址（AppAuth 合约地址）
+        bool isRegistered;
+        address controller;
     }
 
     // Mapping of registered apps
-    mapping(address => AppConfig) public apps;// 注册的应用
+    mapping(address => AppConfig) public apps;
 
     // Mapping of allowed aggregated MR measurements for running KMS
-    mapping(bytes32 => bool) public kmsAllowedAggregatedMrs;// 允许的 KMS 聚合度量
+    mapping(bytes32 => bool) public kmsAllowedAggregatedMrs;
 
     // Mapping of allowed KMS device IDs
-    mapping(bytes32 => bool) public kmsAllowedDeviceIds;// 允许的 KMS 设备 ID
+    mapping(bytes32 => bool) public kmsAllowedDeviceIds;
 
     // Mapping of allowed image measurements
-    mapping(bytes32 => bool) public allowedOsImages;// 允许的 OS 镜像
+    mapping(bytes32 => bool) public appAllowedImages;
+
+    // Mapping of allowed KMS compose hashes
+    mapping(bytes32 => bool) public appAllowedSystemMrs;
 
     // Sequence number for app IDs - per user
-    mapping(address => uint256) public nextAppSequence;// 用户的下一个应用序列号
-
-    // AppAuth implementation contract address for factory deployment
-    address public appAuthImplementation;
+    mapping(address => uint256) public nextAppSequence;
 
     // Events
     event AppRegistered(address appId);
@@ -61,46 +57,21 @@ contract KmsAuth is
     event KmsAggregatedMrRemoved(bytes32 mrAggregated);
     event KmsDeviceAdded(bytes32 deviceId);
     event KmsDeviceRemoved(bytes32 deviceId);
-    event OsImageHashAdded(bytes32 osImageHash);
-    event OsImageHashRemoved(bytes32 osImageHash);
+    event AppImageMrAdded(bytes32 mrImage);
+    event AppImageMrRemoved(bytes32 mrImage);
+    event AppSystemMrAdded(bytes32 mrSystem);
+    event AppSystemMrRemoved(bytes32 mrSystem);
     event GatewayAppIdSet(string gatewayAppId);
-    event AppAuthImplementationSet(address implementation);
-    event AppDeployedViaFactory(address indexed appId, address indexed proxyAddress, address indexed deployer);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
-    // Initialize the contract with the owner wallet address and optionally set AppAuth implementation
-    function initialize(address initialOwner, address _appAuthImplementation) public initializer {
+    // Initialize the contract with the owner wallet address
+    function initialize(address initialOwner) public initializer {
         __Ownable_init(initialOwner);
         __UUPSUpgradeable_init();
-        __ERC165_init();
-        
-        // Set AppAuth implementation if provided
-        if (_appAuthImplementation != address(0)) {
-            appAuthImplementation = _appAuthImplementation;
-            emit AppAuthImplementationSet(_appAuthImplementation);
-        }
-    }
-
-    /**
-     * @dev See {IERC165-supportsInterface}.
-     * @notice Returns true if this contract implements the interface defined by interfaceId
-     * @param interfaceId The interface identifier, as specified in ERC-165
-     * @return True if the contract implements `interfaceId`
-     */
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        virtual
-        override(ERC165Upgradeable, IERC165)
-        returns (bool)
-    {
-        return
-            interfaceId == 0x1e079198 || // IAppAuth
-            super.supportsInterface(interfaceId);
     }
 
     // Function to authorize upgrades (required by UUPSUpgradeable)
@@ -130,7 +101,7 @@ contract KmsAuth is
         emit GatewayAppIdSet(appId);
     }
 
-    // View next app id 预测下一个应用 ID
+    // View next app id
     function nextAppId() public view returns (address appId) {
         bytes32 fullHash = keccak256(
             abi.encodePacked(
@@ -142,60 +113,15 @@ contract KmsAuth is
         return address(uint160(uint256(fullHash)));
     }
 
-    // Internal function to register an app with the given app ID and controller
-    function _registerAppInternal(address appId, address controller) private {
+    // Function to register an app
+    function registerApp(address controller) external {
+        require(controller != address(0), "Invalid controller address");
+        address appId = nextAppId();
         require(!apps[appId].isRegistered, "App already registered");
         apps[appId].isRegistered = true;
         apps[appId].controller = controller;
         nextAppSequence[msg.sender]++;
         emit AppRegistered(appId);
-    }
-
-    // Function to register an app
-    function registerApp(address controller) external {
-        require(controller != address(0), "Invalid controller address");
-        address appId = nextAppId();
-        _registerAppInternal(appId, controller);
-    }
-
-    // Function to set AppAuth implementation contract address
-    function setAppAuthImplementation(address _implementation) external onlyOwner {
-        require(_implementation != address(0), "Invalid implementation address");
-        appAuthImplementation = _implementation;
-        emit AppAuthImplementationSet(_implementation);
-    }
-
-    // Factory method: Deploy and register AppAuth in single transaction
-    function deployAndRegisterApp(
-        address initialOwner,
-        bool disableUpgrades,
-        bool allowAnyDevice,
-        bytes32 initialDeviceId,
-        bytes32 initialComposeHash
-    ) external returns (address appId, address proxyAddress) {
-        require(appAuthImplementation != address(0), "AppAuth implementation not set");
-        require(initialOwner != address(0), "Invalid owner address");
-        
-        // Calculate app ID
-        appId = nextAppId();
-        
-        // Prepare initialization data
-        bytes memory initData = abi.encodeWithSelector(
-            bytes4(keccak256("initialize(address,address,bool,bool,bytes32,bytes32)")),
-            initialOwner,
-            appId,
-            disableUpgrades,
-            allowAnyDevice,
-            initialDeviceId,
-            initialComposeHash
-        );
-        
-        // Deploy proxy contract
-        proxyAddress = address(new ERC1967Proxy(appAuthImplementation, initData));
-        
-        // Register to KMS
-        _registerAppInternal(appId, proxyAddress);
-        emit AppDeployedViaFactory(appId, proxyAddress, msg.sender);
     }
 
     // Function to register an aggregated MR measurement
@@ -223,15 +149,27 @@ contract KmsAuth is
     }
 
     // Function to register an image measurement
-    function addOsImageHash(bytes32 osImageHash) external onlyOwner {
-        allowedOsImages[osImageHash] = true;
-        emit OsImageHashAdded(osImageHash);
+    function addAppImageMr(bytes32 mrImage) external onlyOwner {
+        appAllowedImages[mrImage] = true;
+        emit AppImageMrAdded(mrImage);
     }
 
     // Function to deregister an image measurement
-    function removeOsImageHash(bytes32 osImageHash) external onlyOwner {
-        allowedOsImages[osImageHash] = false;
-        emit OsImageHashRemoved(osImageHash);
+    function removeAppImageMr(bytes32 mrImage) external onlyOwner {
+        appAllowedImages[mrImage] = false;
+        emit AppImageMrRemoved(mrImage);
+    }
+
+    // Function to register a system MR measurement
+    function addAppSystemMr(bytes32 mrSystem) external onlyOwner {
+        appAllowedSystemMrs[mrSystem] = true;
+        emit AppSystemMrAdded(mrSystem);
+    }
+
+    // Function to deregister a system MR measurement
+    function removeAppSystemMr(bytes32 mrSystem) external onlyOwner {
+        appAllowedSystemMrs[mrSystem] = false;
+        emit AppSystemMrRemoved(mrSystem);
     }
 
     // Function to check if KMS is allowed to boot
@@ -244,11 +182,6 @@ contract KmsAuth is
             keccak256(abi.encodePacked("UpToDate"))
         ) {
             return (false, "TCB status is not up to date");
-        }
-
-        // Check if the OS image is allowed
-        if (!allowedOsImages[bootInfo.osImageHash]) {
-            return (false, "OS image is not allowed");
         }
 
         // Check if the aggregated MR is allowed
@@ -274,8 +207,11 @@ contract KmsAuth is
         }
 
         // Check aggregated MR and image measurements
-        if (!allowedOsImages[bootInfo.osImageHash]) {
-            return (false, "OS image is not allowed");
+        if (
+            !appAllowedSystemMrs[bootInfo.mrSystem] &&
+            !appAllowedImages[bootInfo.mrImage]
+        ) {
+            return (false, "Neither system MR nor image is allowed");
         }
 
         // Ask the app controller if the app is allowed to boot

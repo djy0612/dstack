@@ -35,7 +35,7 @@ describe('Integration Tests', () => {
         instanceId: ethers.Wallet.createRandom().address,
         deviceId: ethers.encodeBytes32String('123'),
         mrAggregated: ethers.encodeBytes32String('11'),
-        osImageHash: ethers.encodeBytes32String('22'),
+        mrImage: ethers.encodeBytes32String('22'),
         composeHash: ethers.encodeBytes32String('33'),
         mrSystem: ethers.encodeBytes32String('44'),
         tcbStatus: "UpToDate",
@@ -49,13 +49,37 @@ describe('Integration Tests', () => {
       expect(isAllowed).to.equal(true);
     });
 
-    it('should return false when image is not registered', async () => {
-      const badImage = ethers.encodeBytes32String('9999');
+    it('should return true when enclave is not registered but image is registered', async () => {
+      const badMrAggregated = ethers.encodeBytes32String('9999');
       const [isAllowed, reason] = await kmsAuth.isAppAllowed({
         ...mockBootInfo,
-        osImageHash: badImage
+        mrAggregated: badMrAggregated
       });
-      expect(reason).to.equal('OS image is not allowed');
+
+      expect(isAllowed).to.equal(true);
+      expect(reason).to.equal('');
+    });
+
+    it('should return true when image is not registered but enclave is registered', async () => {
+      const badMrImage = ethers.encodeBytes32String('9999');
+      const [isAllowed, reason] = await kmsAuth.isAppAllowed({
+        ...mockBootInfo,
+        mrImage: badMrImage
+      });
+
+      expect(reason).to.equal('');
+      expect(isAllowed).to.equal(true);
+    });
+
+    it('should return false when enclave and image are not registered', async () => {
+      const badMrSystem = ethers.encodeBytes32String('9999');
+      const badMrImage = ethers.encodeBytes32String('9999');
+      const [isAllowed, reason] = await kmsAuth.isAppAllowed({
+        ...mockBootInfo,
+        mrSystem: badMrSystem,
+        mrImage: badMrImage
+      });
+      expect(reason).to.equal('Neither system MR nor image is allowed');
       expect(isAllowed).to.equal(false);
     });
   });
@@ -75,7 +99,7 @@ describe('Integration Tests', () => {
         deviceId: ethers.encodeBytes32String("123"),
         mrSystem: ethers.encodeBytes32String("44"),
         mrAggregated: ethers.encodeBytes32String("11"),
-        osImageHash: ethers.encodeBytes32String("22")
+        mrImage: ethers.encodeBytes32String("22")
       };
     });
 
@@ -86,13 +110,34 @@ describe('Integration Tests', () => {
         expect(result.isAllowed).to.equal(true);
       });
 
-      it('should return false when image is not registered', async () => {
+      it('should return true when enclave is not allowed but image is allowed', async () => {
         const badBootInfo = {
           ...mockBootInfo,
-          osImageHash: ethers.encodeBytes32String('9999')
+          mrAggregated: ethers.encodeBytes32String('9999')
         };
         const result = await backend.checkBoot(badBootInfo, false);
-        expect(result.reason).to.equal('OS image is not allowed');
+        expect(result.reason).to.equal('');
+        expect(result.isAllowed).to.equal(true);
+      });
+
+      it('should return true when image is not allowed but enclave is allowed', async () => {
+        const badBootInfo = {
+          ...mockBootInfo,
+          mrImage: ethers.encodeBytes32String('9999')
+        };
+        const result = await backend.checkBoot(badBootInfo, false);
+        expect(result.reason).to.equal('');
+        expect(result.isAllowed).to.equal(true);
+      });
+
+      it('should return false when enclave and image are not registered', async () => {
+        const badBootInfo = {
+          ...mockBootInfo,
+          mrSystem: ethers.encodeBytes32String('9999'),
+          mrImage: ethers.encodeBytes32String('9999')
+        };
+        const result = await backend.checkBoot(badBootInfo, false);
+        expect(result.reason).to.equal('Neither system MR nor image is allowed');
         expect(result.isAllowed).to.equal(false);
       });
 

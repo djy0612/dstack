@@ -32,8 +32,8 @@ describe('EthereumBackend', () => {
       instanceId: ethers.Wallet.createRandom().address,
       deviceId: ethers.encodeBytes32String('0x1234'),
       mrAggregated: ethers.encodeBytes32String('22'),
-      mrSystem: ethers.encodeBytes32String('44'),
-      osImageHash: ethers.encodeBytes32String('33'),
+      mrImage: ethers.encodeBytes32String('33'),
+      mrSystem: ethers.encodeBytes32String('44')
     };
 
     // Set up KMS info
@@ -46,7 +46,7 @@ describe('EthereumBackend', () => {
 
     // Register enclave and image
     await kmsAuth.addKmsAggregatedMr(mockBootInfo.mrAggregated);
-    await kmsAuth.addOsImageHash(mockBootInfo.osImageHash);
+    await kmsAuth.addAppImageMr(mockBootInfo.mrImage);
     await appAuth.addComposeHash(mockBootInfo.composeHash);
   });
 
@@ -57,13 +57,36 @@ describe('EthereumBackend', () => {
       expect(result.isAllowed).toBe(true);
     });
 
-    it('should return false when image is not registered', async () => {
+    it('should return true when enclave is not allowed but image is allowed', async () => {
       const badBootInfo = {
         ...mockBootInfo,
-        osImageHash: ethers.encodeBytes32String('9999')
+        mrAggregated: ethers.encodeBytes32String('0x9999'),
       };
       const result = await backend.checkBoot(badBootInfo, false);
-      expect(result.reason).toBe('OS image is not allowed');
+      expect(result.reason).toBe('');
+      expect(result.isAllowed).toBe(true);
+    });
+
+    it('should return true when image is not allowed but enclave is allowed', async () => {
+      const badBootInfo = {
+        ...mockBootInfo,
+        mrImage: ethers.encodeBytes32String('0x9999')
+      };
+      const result = await backend.checkBoot(badBootInfo, false);
+      expect(result.reason).toBe('');
+      expect(result.isAllowed).toBe(true);
+    });
+
+    it('should return false when enclave and image are not registered', async () => {
+      const badMrSystem = ethers.encodeBytes32String('9999');
+      const badMrImage = ethers.encodeBytes32String('9999');
+      const badBootInfo = {
+        ...mockBootInfo,
+        mrSystem: badMrSystem,
+        mrImage: badMrImage
+      };
+      const result = await backend.checkBoot(badBootInfo, false);
+      expect(result.reason).toBe('Neither system MR nor image is allowed');
       expect(result.isAllowed).toBe(false);
     });
 

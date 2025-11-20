@@ -30,10 +30,6 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ContextUpgradeable__factory>;
     getContractFactory(
-      name: "ERC165Upgradeable",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.ERC165Upgradeable__factory>;
-    getContractFactory(
       name: "IERC1822Proxiable",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IERC1822Proxiable__factory>;
@@ -46,17 +42,9 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IBeacon__factory>;
     getContractFactory(
-      name: "ERC1967Proxy",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.ERC1967Proxy__factory>;
-    getContractFactory(
       name: "ERC1967Utils",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ERC1967Utils__factory>;
-    getContractFactory(
-      name: "Proxy",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.Proxy__factory>;
     getContractFactory(
       name: "Address",
       signerOrOptions?: ethers.Signer | FactoryOptions
@@ -66,10 +54,6 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.Errors__factory>;
     getContractFactory(
-      name: "IERC165",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.IERC165__factory>;
-    getContractFactory(
       name: "AppAuth",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.AppAuth__factory>;
@@ -77,10 +61,6 @@ declare module "hardhat/types/runtime" {
       name: "IAppAuth",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IAppAuth__factory>;
-    getContractFactory(
-      name: "IAppAuthBasicManagement",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.IAppAuthBasicManagement__factory>;
     getContractFactory(
       name: "KmsAuth",
       signerOrOptions?: ethers.Signer | FactoryOptions
@@ -107,11 +87,6 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.ContextUpgradeable>;
     getContractAt(
-      name: "ERC165Upgradeable",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.ERC165Upgradeable>;
-    getContractAt(
       name: "IERC1822Proxiable",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -127,20 +102,10 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.IBeacon>;
     getContractAt(
-      name: "ERC1967Proxy",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.ERC1967Proxy>;
-    getContractAt(
       name: "ERC1967Utils",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.ERC1967Utils>;
-    getContractAt(
-      name: "Proxy",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.Proxy>;
     getContractAt(
       name: "Address",
       address: string | ethers.Addressable,
@@ -152,11 +117,6 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.Errors>;
     getContractAt(
-      name: "IERC165",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.IERC165>;
-    getContractAt(
       name: "AppAuth",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
@@ -166,11 +126,6 @@ declare module "hardhat/types/runtime" {
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.IAppAuth>;
-    getContractAt(
-      name: "IAppAuthBasicManagement",
-      address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<Contracts.IAppAuthBasicManagement>;
     getContractAt(
       name: "KmsAuth",
       address: string | ethers.Addressable,
@@ -194,10 +149,6 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ContextUpgradeable>;
     deployContract(
-      name: "ERC165Upgradeable",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.ERC165Upgradeable>;
-    deployContract(
       name: "IERC1822Proxiable",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IERC1822Proxiable>;
@@ -210,17 +161,9 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IBeacon>;
     deployContract(
-      name: "ERC1967Proxy",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.ERC1967Proxy>;
-    deployContract(
       name: "ERC1967Utils",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ERC1967Utils>;
-    deployContract(
-      name: "Proxy",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.Proxy>;
     deployContract(
       name: "Address",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -230,10 +173,6 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Errors>;
     deployContract(
-      name: "IERC165",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IERC165>;
-    deployContract(
       name: "AppAuth",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.AppAuth>;
@@ -241,10 +180,6 @@ declare module "hardhat/types/runtime" {
       name: "IAppAuth",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IAppAuth>;
-    deployContract(
-      name: "IAppAuthBasicManagement",
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IAppAuthBasicManagement>;
     deployContract(
       name: "KmsAuth",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -271,11 +206,6 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ContextUpgradeable>;
     deployContract(
-      name: "ERC165Upgradeable",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.ERC165Upgradeable>;
-    deployContract(
       name: "IERC1822Proxiable",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -291,20 +221,10 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IBeacon>;
     deployContract(
-      name: "ERC1967Proxy",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.ERC1967Proxy>;
-    deployContract(
       name: "ERC1967Utils",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ERC1967Utils>;
-    deployContract(
-      name: "Proxy",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.Proxy>;
     deployContract(
       name: "Address",
       args: any[],
@@ -316,11 +236,6 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.Errors>;
     deployContract(
-      name: "IERC165",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IERC165>;
-    deployContract(
       name: "AppAuth",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -330,11 +245,6 @@ declare module "hardhat/types/runtime" {
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IAppAuth>;
-    deployContract(
-      name: "IAppAuthBasicManagement",
-      args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.IAppAuthBasicManagement>;
     deployContract(
       name: "KmsAuth",
       args: any[],

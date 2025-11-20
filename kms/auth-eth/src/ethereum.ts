@@ -26,7 +26,7 @@ export class EthereumBackend {
     // Add '0x' prefix back
     return '0x' + hex;
   }
-  // 启动验证
+
   async checkBoot(bootInfo: BootInfo, isKms: boolean): Promise<BootResponse> {
     // Create boot info struct for contract call
     const bootInfoStruct = {
@@ -36,7 +36,7 @@ export class EthereumBackend {
       deviceId: this.decodeHex(bootInfo.deviceId, 32),
       mrSystem: this.decodeHex(bootInfo.mrSystem, 32),
       mrAggregated: this.decodeHex(bootInfo.mrAggregated, 32),
-      osImageHash: this.decodeHex(bootInfo.osImageHash, 32),
+      mrImage: this.decodeHex(bootInfo.mrImage, 32),
       tcbStatus: bootInfo.tcbStatus,
       advisoryIds: bootInfo.advisoryIds
     };
@@ -53,18 +53,5 @@ export class EthereumBackend {
       reason,
       gatewayAppId,
     }
-  }
-  // 获取网关应用 ID
-  async getGatewayAppId(): Promise<string> {
-    return await this.kmsAuth.gatewayAppId();
-  }
-  // 获取链 ID
-  async getChainId(): Promise<number> {
-    const chainId = await this.provider.getNetwork().then((network) => network.chainId);
-    return Number(chainId);
-  }
-  // 获取 AppAuth 实现地址
-  async getAppAuthImplementation(): Promise<string> {
-    return await this.kmsAuth.appAuthImplementation();
   }
 }

@@ -31,7 +31,7 @@ export declare namespace IAppAuth {
     deviceId: BytesLike;
     mrAggregated: BytesLike;
     mrSystem: BytesLike;
-    osImageHash: BytesLike;
+    mrImage: BytesLike;
     tcbStatus: string;
     advisoryIds: string[];
   };
@@ -43,7 +43,7 @@ export declare namespace IAppAuth {
     deviceId: string,
     mrAggregated: string,
     mrSystem: string,
-    osImageHash: string,
+    mrImage: string,
     tcbStatus: string,
     advisoryIds: string[]
   ] & {
@@ -53,7 +53,7 @@ export declare namespace IAppAuth {
     deviceId: string;
     mrAggregated: string;
     mrSystem: string;
-    osImageHash: string;
+    mrImage: string;
     tcbStatus: string;
     advisoryIds: string[];
   };
@@ -79,14 +79,13 @@ export interface KmsAuthInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "UPGRADE_INTERFACE_VERSION"
+      | "addAppImageMr"
+      | "addAppSystemMr"
       | "addKmsAggregatedMr"
       | "addKmsDevice"
-      | "addOsImageHash"
-      | "allowedOsImages"
-      | "appAuthImplementation"
+      | "appAllowedImages"
+      | "appAllowedSystemMrs"
       | "apps"
-      | "deployAndRegisterApp"
-      | "gatewayAppId"
       | "initialize"
       | "isAppAllowed"
       | "isKmsAllowed"
@@ -98,41 +97,49 @@ export interface KmsAuthInterface extends Interface {
       | "owner"
       | "proxiableUUID"
       | "registerApp"
+      | "removeAppImageMr"
+      | "removeAppSystemMr"
       | "removeKmsAggregatedMr"
       | "removeKmsDevice"
-      | "removeOsImageHash"
       | "renounceOwnership"
-      | "setAppAuthImplementation"
-      | "setGatewayAppId"
       | "setKmsEventlog"
       | "setKmsInfo"
       | "setKmsQuote"
-      | "supportsInterface"
+      | "setTproxyAppId"
+      | "tproxyAppId"
       | "transferOwnership"
       | "upgradeToAndCall"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
-      | "AppAuthImplementationSet"
-      | "AppDeployedViaFactory"
+      | "AppImageMrAdded"
+      | "AppImageMrRemoved"
       | "AppRegistered"
-      | "GatewayAppIdSet"
+      | "AppSystemMrAdded"
+      | "AppSystemMrRemoved"
       | "Initialized"
       | "KmsAggregatedMrAdded"
       | "KmsAggregatedMrRemoved"
       | "KmsDeviceAdded"
       | "KmsDeviceRemoved"
       | "KmsInfoSet"
-      | "OsImageHashAdded"
-      | "OsImageHashRemoved"
       | "OwnershipTransferred"
+      | "TproxyAppIdSet"
       | "Upgraded"
   ): EventFragment;
 
   encodeFunctionData(
     functionFragment: "UPGRADE_INTERFACE_VERSION",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "addAppImageMr",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "addAppSystemMr",
+    values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "addKmsAggregatedMr",
@@ -143,29 +150,17 @@ export interface KmsAuthInterface extends Interface {
     values: [BytesLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "addOsImageHash",
+    functionFragment: "appAllowedImages",
     values: [BytesLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "allowedOsImages",
+    functionFragment: "appAllowedSystemMrs",
     values: [BytesLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "appAuthImplementation",
-    values?: undefined
   ): string;
   encodeFunctionData(functionFragment: "apps", values: [AddressLike]): string;
   encodeFunctionData(
-    functionFragment: "deployAndRegisterApp",
-    values: [AddressLike, boolean, boolean, BytesLike, BytesLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "gatewayAppId",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
     functionFragment: "initialize",
-    values: [AddressLike, AddressLike]
+    values: [AddressLike]
   ): string;
   encodeFunctionData(
     functionFragment: "isAppAllowed",
@@ -199,6 +194,14 @@ export interface KmsAuthInterface extends Interface {
     values: [AddressLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "removeAppImageMr",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "removeAppSystemMr",
+    values: [BytesLike]
+  ): string;
+  encodeFunctionData(
     functionFragment: "removeKmsAggregatedMr",
     values: [BytesLike]
   ): string;
@@ -207,20 +210,8 @@ export interface KmsAuthInterface extends Interface {
     values: [BytesLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "removeOsImageHash",
-    values: [BytesLike]
-  ): string;
-  encodeFunctionData(
     functionFragment: "renounceOwnership",
     values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "setAppAuthImplementation",
-    values: [AddressLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "setGatewayAppId",
-    values: [string]
   ): string;
   encodeFunctionData(
     functionFragment: "setKmsEventlog",
@@ -235,8 +226,12 @@ export interface KmsAuthInterface extends Interface {
     values: [BytesLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "supportsInterface",
-    values: [BytesLike]
+    functionFragment: "setTproxyAppId",
+    values: [string]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "tproxyAppId",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "transferOwnership",
@@ -252,6 +247,14 @@ export interface KmsAuthInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "addAppImageMr",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "addAppSystemMr",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "addKmsAggregatedMr",
     data: BytesLike
   ): Result;
@@ -260,26 +263,14 @@ export interface KmsAuthInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "addOsImageHash",
+    functionFragment: "appAllowedImages",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "allowedOsImages",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "appAuthImplementation",
+    functionFragment: "appAllowedSystemMrs",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "apps", data: BytesLike): Result;
-  decodeFunctionResult(
-    functionFragment: "deployAndRegisterApp",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "gatewayAppId",
-    data: BytesLike
-  ): Result;
   decodeFunctionResult(functionFragment: "initialize", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "isAppAllowed",
@@ -313,6 +304,14 @@ export interface KmsAuthInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "removeAppImageMr",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "removeAppSystemMr",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "removeKmsAggregatedMr",
     data: BytesLike
   ): Result;
@@ -321,19 +320,7 @@ export interface KmsAuthInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "removeOsImageHash",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "renounceOwnership",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "setAppAuthImplementation",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "setGatewayAppId",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -346,7 +333,11 @@ export interface KmsAuthInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "supportsInterface",
+    functionFragment: "setTproxyAppId",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "tproxyAppId",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -359,11 +350,11 @@ export interface KmsAuthInterface extends Interface {
   ): Result;
 }
 
-export namespace AppAuthImplementationSetEvent {
-  export type InputTuple = [implementation: AddressLike];
-  export type OutputTuple = [implementation: string];
+export namespace AppImageMrAddedEvent {
+  export type InputTuple = [mrImage: BytesLike];
+  export type OutputTuple = [mrImage: string];
   export interface OutputObject {
-    implementation: string;
+    mrImage: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -371,21 +362,11 @@ export namespace AppAuthImplementationSetEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace AppDeployedViaFactoryEvent {
-  export type InputTuple = [
-    appId: AddressLike,
-    proxyAddress: AddressLike,
-    deployer: AddressLike
-  ];
-  export type OutputTuple = [
-    appId: string,
-    proxyAddress: string,
-    deployer: string
-  ];
+export namespace AppImageMrRemovedEvent {
+  export type InputTuple = [mrImage: BytesLike];
+  export type OutputTuple = [mrImage: string];
   export interface OutputObject {
-    appId: string;
-    proxyAddress: string;
-    deployer: string;
+    mrImage: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -405,11 +386,23 @@ export namespace AppRegisteredEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace GatewayAppIdSetEvent {
-  export type InputTuple = [gatewayAppId: string];
-  export type OutputTuple = [gatewayAppId: string];
+export namespace AppSystemMrAddedEvent {
+  export type InputTuple = [mrSystem: BytesLike];
+  export type OutputTuple = [mrSystem: string];
   export interface OutputObject {
-    gatewayAppId: string;
+    mrSystem: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace AppSystemMrRemovedEvent {
+  export type InputTuple = [mrSystem: BytesLike];
+  export type OutputTuple = [mrSystem: string];
+  export interface OutputObject {
+    mrSystem: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -489,36 +482,24 @@ export namespace KmsInfoSetEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
-export namespace OsImageHashAddedEvent {
-  export type InputTuple = [osImageHash: BytesLike];
-  export type OutputTuple = [osImageHash: string];
-  export interface OutputObject {
-    osImageHash: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace OsImageHashRemovedEvent {
-  export type InputTuple = [osImageHash: BytesLike];
-  export type OutputTuple = [osImageHash: string];
-  export interface OutputObject {
-    osImageHash: string;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
 export namespace OwnershipTransferredEvent {
   export type InputTuple = [previousOwner: AddressLike, newOwner: AddressLike];
   export type OutputTuple = [previousOwner: string, newOwner: string];
   export interface OutputObject {
     previousOwner: string;
     newOwner: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace TproxyAppIdSetEvent {
+  export type InputTuple = [tproxyAppId: string];
+  export type OutputTuple = [tproxyAppId: string];
+  export interface OutputObject {
+    tproxyAppId: string;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -583,6 +564,18 @@ export interface KmsAuth extends BaseContract {
 
   UPGRADE_INTERFACE_VERSION: TypedContractMethod<[], [string], "view">;
 
+  addAppImageMr: TypedContractMethod<
+    [mrImage: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+
+  addAppSystemMr: TypedContractMethod<
+    [mrSystem: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+
   addKmsAggregatedMr: TypedContractMethod<
     [mrAggregated: BytesLike],
     [void],
@@ -595,15 +588,13 @@ export interface KmsAuth extends BaseContract {
     "nonpayable"
   >;
 
-  addOsImageHash: TypedContractMethod<
-    [osImageHash: BytesLike],
-    [void],
-    "nonpayable"
+  appAllowedImages: TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
+
+  appAllowedSystemMrs: TypedContractMethod<
+    [arg0: BytesLike],
+    [boolean],
+    "view"
   >;
-
-  allowedOsImages: TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
-
-  appAuthImplementation: TypedContractMethod<[], [string], "view">;
 
   apps: TypedContractMethod<
     [arg0: AddressLike],
@@ -611,22 +602,8 @@ export interface KmsAuth extends BaseContract {
     "view"
   >;
 
-  deployAndRegisterApp: TypedContractMethod<
-    [
-      initialOwner: AddressLike,
-      disableUpgrades: boolean,
-      allowAnyDevice: boolean,
-      initialDeviceId: BytesLike,
-      initialComposeHash: BytesLike
-    ],
-    [[string, string] & { appId: string; proxyAddress: string }],
-    "nonpayable"
-  >;
-
-  gatewayAppId: TypedContractMethod<[], [string], "view">;
-
   initialize: TypedContractMethod<
-    [initialOwner: AddressLike, _appAuthImplementation: AddressLike],
+    [initialOwner: AddressLike],
     [void],
     "nonpayable"
   >;
@@ -682,6 +659,18 @@ export interface KmsAuth extends BaseContract {
     "nonpayable"
   >;
 
+  removeAppImageMr: TypedContractMethod<
+    [mrImage: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+
+  removeAppSystemMr: TypedContractMethod<
+    [mrSystem: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+
   removeKmsAggregatedMr: TypedContractMethod<
     [mrAggregated: BytesLike],
     [void],
@@ -694,21 +683,7 @@ export interface KmsAuth extends BaseContract {
     "nonpayable"
   >;
 
-  removeOsImageHash: TypedContractMethod<
-    [osImageHash: BytesLike],
-    [void],
-    "nonpayable"
-  >;
-
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
-
-  setAppAuthImplementation: TypedContractMethod<
-    [_implementation: AddressLike],
-    [void],
-    "nonpayable"
-  >;
-
-  setGatewayAppId: TypedContractMethod<[appId: string], [void], "nonpayable">;
 
   setKmsEventlog: TypedContractMethod<
     [eventlog: BytesLike],
@@ -724,11 +699,9 @@ export interface KmsAuth extends BaseContract {
 
   setKmsQuote: TypedContractMethod<[quote: BytesLike], [void], "nonpayable">;
 
-  supportsInterface: TypedContractMethod<
-    [interfaceId: BytesLike],
-    [boolean],
-    "view"
-  >;
+  setTproxyAppId: TypedContractMethod<[appId: string], [void], "nonpayable">;
+
+  tproxyAppId: TypedContractMethod<[], [string], "view">;
 
   transferOwnership: TypedContractMethod<
     [newOwner: AddressLike],
@@ -750,20 +723,23 @@ export interface KmsAuth extends BaseContract {
     nameOrSignature: "UPGRADE_INTERFACE_VERSION"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
+    nameOrSignature: "addAppImageMr"
+  ): TypedContractMethod<[mrImage: BytesLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "addAppSystemMr"
+  ): TypedContractMethod<[mrSystem: BytesLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "addKmsAggregatedMr"
   ): TypedContractMethod<[mrAggregated: BytesLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "addKmsDevice"
   ): TypedContractMethod<[deviceId: BytesLike], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "addOsImageHash"
-  ): TypedContractMethod<[osImageHash: BytesLike], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "allowedOsImages"
+    nameOrSignature: "appAllowedImages"
   ): TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
   getFunction(
-    nameOrSignature: "appAuthImplementation"
-  ): TypedContractMethod<[], [string], "view">;
+    nameOrSignature: "appAllowedSystemMrs"
+  ): TypedContractMethod<[arg0: BytesLike], [boolean], "view">;
   getFunction(
     nameOrSignature: "apps"
   ): TypedContractMethod<
@@ -772,28 +748,8 @@ export interface KmsAuth extends BaseContract {
     "view"
   >;
   getFunction(
-    nameOrSignature: "deployAndRegisterApp"
-  ): TypedContractMethod<
-    [
-      initialOwner: AddressLike,
-      disableUpgrades: boolean,
-      allowAnyDevice: boolean,
-      initialDeviceId: BytesLike,
-      initialComposeHash: BytesLike
-    ],
-    [[string, string] & { appId: string; proxyAddress: string }],
-    "nonpayable"
-  >;
-  getFunction(
-    nameOrSignature: "gatewayAppId"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
     nameOrSignature: "initialize"
-  ): TypedContractMethod<
-    [initialOwner: AddressLike, _appAuthImplementation: AddressLike],
-    [void],
-    "nonpayable"
-  >;
+  ): TypedContractMethod<[initialOwner: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "isAppAllowed"
   ): TypedContractMethod<
@@ -844,23 +800,20 @@ export interface KmsAuth extends BaseContract {
     nameOrSignature: "registerApp"
   ): TypedContractMethod<[controller: AddressLike], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "removeAppImageMr"
+  ): TypedContractMethod<[mrImage: BytesLike], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "removeAppSystemMr"
+  ): TypedContractMethod<[mrSystem: BytesLike], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "removeKmsAggregatedMr"
   ): TypedContractMethod<[mrAggregated: BytesLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "removeKmsDevice"
   ): TypedContractMethod<[deviceId: BytesLike], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "removeOsImageHash"
-  ): TypedContractMethod<[osImageHash: BytesLike], [void], "nonpayable">;
-  getFunction(
     nameOrSignature: "renounceOwnership"
   ): TypedContractMethod<[], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "setAppAuthImplementation"
-  ): TypedContractMethod<[_implementation: AddressLike], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "setGatewayAppId"
-  ): TypedContractMethod<[appId: string], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "setKmsEventlog"
   ): TypedContractMethod<[eventlog: BytesLike], [void], "nonpayable">;
@@ -871,8 +824,11 @@ export interface KmsAuth extends BaseContract {
     nameOrSignature: "setKmsQuote"
   ): TypedContractMethod<[quote: BytesLike], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "supportsInterface"
-  ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
+    nameOrSignature: "setTproxyAppId"
+  ): TypedContractMethod<[appId: string], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "tproxyAppId"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
@@ -885,18 +841,18 @@ export interface KmsAuth extends BaseContract {
   >;
 
   getEvent(
-    key: "AppAuthImplementationSet"
+    key: "AppImageMrAdded"
   ): TypedContractEvent<
-    AppAuthImplementationSetEvent.InputTuple,
-    AppAuthImplementationSetEvent.OutputTuple,
-    AppAuthImplementationSetEvent.OutputObject
+    AppImageMrAddedEvent.InputTuple,
+    AppImageMrAddedEvent.OutputTuple,
+    AppImageMrAddedEvent.OutputObject
   >;
   getEvent(
-    key: "AppDeployedViaFactory"
+    key: "AppImageMrRemoved"
   ): TypedContractEvent<
-    AppDeployedViaFactoryEvent.InputTuple,
-    AppDeployedViaFactoryEvent.OutputTuple,
-    AppDeployedViaFactoryEvent.OutputObject
+    AppImageMrRemovedEvent.InputTuple,
+    AppImageMrRemovedEvent.OutputTuple,
+    AppImageMrRemovedEvent.OutputObject
   >;
   getEvent(
     key: "AppRegistered"
@@ -906,11 +862,18 @@ export interface KmsAuth extends BaseContract {
     AppRegisteredEvent.OutputObject
   >;
   getEvent(
-    key: "GatewayAppIdSet"
+    key: "AppSystemMrAdded"
   ): TypedContractEvent<
-    GatewayAppIdSetEvent.InputTuple,
-    GatewayAppIdSetEvent.OutputTuple,
-    GatewayAppIdSetEvent.OutputObject
+    AppSystemMrAddedEvent.InputTuple,
+    AppSystemMrAddedEvent.OutputTuple,
+    AppSystemMrAddedEvent.OutputObject
+  >;
+  getEvent(
+    key: "AppSystemMrRemoved"
+  ): TypedContractEvent<
+    AppSystemMrRemovedEvent.InputTuple,
+    AppSystemMrRemovedEvent.OutputTuple,
+    AppSystemMrRemovedEvent.OutputObject
   >;
   getEvent(
     key: "Initialized"
@@ -955,25 +918,18 @@ export interface KmsAuth extends BaseContract {
     KmsInfoSetEvent.OutputObject
   >;
   getEvent(
-    key: "OsImageHashAdded"
-  ): TypedContractEvent<
-    OsImageHashAddedEvent.InputTuple,
-    OsImageHashAddedEvent.OutputTuple,
-    OsImageHashAddedEvent.OutputObject
-  >;
-  getEvent(
-    key: "OsImageHashRemoved"
-  ): TypedContractEvent<
-    OsImageHashRemovedEvent.InputTuple,
-    OsImageHashRemovedEvent.OutputTuple,
-    OsImageHashRemovedEvent.OutputObject
-  >;
-  getEvent(
     key: "OwnershipTransferred"
   ): TypedContractEvent<
     OwnershipTransferredEvent.InputTuple,
     OwnershipTransferredEvent.OutputTuple,
     OwnershipTransferredEvent.OutputObject
+  >;
+  getEvent(
+    key: "TproxyAppIdSet"
+  ): TypedContractEvent<
+    TproxyAppIdSetEvent.InputTuple,
+    TproxyAppIdSetEvent.OutputTuple,
+    TproxyAppIdSetEvent.OutputObject
   >;
   getEvent(
     key: "Upgraded"
@@ -984,26 +940,26 @@ export interface KmsAuth extends BaseContract {
   >;
 
   filters: {
-    "AppAuthImplementationSet(address)": TypedContractEvent<
-      AppAuthImplementationSetEvent.InputTuple,
-      AppAuthImplementationSetEvent.OutputTuple,
-      AppAuthImplementationSetEvent.OutputObject
+    "AppImageMrAdded(bytes32)": TypedContractEvent<
+      AppImageMrAddedEvent.InputTuple,
+      AppImageMrAddedEvent.OutputTuple,
+      AppImageMrAddedEvent.OutputObject
     >;
-    AppAuthImplementationSet: TypedContractEvent<
-      AppAuthImplementationSetEvent.InputTuple,
-      AppAuthImplementationSetEvent.OutputTuple,
-      AppAuthImplementationSetEvent.OutputObject
+    AppImageMrAdded: TypedContractEvent<
+      AppImageMrAddedEvent.InputTuple,
+      AppImageMrAddedEvent.OutputTuple,
+      AppImageMrAddedEvent.OutputObject
     >;
 
-    "AppDeployedViaFactory(address,address,address)": TypedContractEvent<
-      AppDeployedViaFactoryEvent.InputTuple,
-      AppDeployedViaFactoryEvent.OutputTuple,
-      AppDeployedViaFactoryEvent.OutputObject
+    "AppImageMrRemoved(bytes32)": TypedContractEvent<
+      AppImageMrRemovedEvent.InputTuple,
+      AppImageMrRemovedEvent.OutputTuple,
+      AppImageMrRemovedEvent.OutputObject
     >;
-    AppDeployedViaFactory: TypedContractEvent<
-      AppDeployedViaFactoryEvent.InputTuple,
-      AppDeployedViaFactoryEvent.OutputTuple,
-      AppDeployedViaFactoryEvent.OutputObject
+    AppImageMrRemoved: TypedContractEvent<
+      AppImageMrRemovedEvent.InputTuple,
+      AppImageMrRemovedEvent.OutputTuple,
+      AppImageMrRemovedEvent.OutputObject
     >;
 
     "AppRegistered(address)": TypedContractEvent<
@@ -1017,15 +973,26 @@ export interface KmsAuth extends BaseContract {
       AppRegisteredEvent.OutputObject
     >;
 
-    "GatewayAppIdSet(string)": TypedContractEvent<
-      GatewayAppIdSetEvent.InputTuple,
-      GatewayAppIdSetEvent.OutputTuple,
-      GatewayAppIdSetEvent.OutputObject
+    "AppSystemMrAdded(bytes32)": TypedContractEvent<
+      AppSystemMrAddedEvent.InputTuple,
+      AppSystemMrAddedEvent.OutputTuple,
+      AppSystemMrAddedEvent.OutputObject
     >;
-    GatewayAppIdSet: TypedContractEvent<
-      GatewayAppIdSetEvent.InputTuple,
-      GatewayAppIdSetEvent.OutputTuple,
-      GatewayAppIdSetEvent.OutputObject
+    AppSystemMrAdded: TypedContractEvent<
+      AppSystemMrAddedEvent.InputTuple,
+      AppSystemMrAddedEvent.OutputTuple,
+      AppSystemMrAddedEvent.OutputObject
+    >;
+
+    "AppSystemMrRemoved(bytes32)": TypedContractEvent<
+      AppSystemMrRemovedEvent.InputTuple,
+      AppSystemMrRemovedEvent.OutputTuple,
+      AppSystemMrRemovedEvent.OutputObject
+    >;
+    AppSystemMrRemoved: TypedContractEvent<
+      AppSystemMrRemovedEvent.InputTuple,
+      AppSystemMrRemovedEvent.OutputTuple,
+      AppSystemMrRemovedEvent.OutputObject
     >;
 
     "Initialized(uint64)": TypedContractEvent<
@@ -1094,28 +1061,6 @@ export interface KmsAuth extends BaseContract {
       KmsInfoSetEvent.OutputObject
     >;
 
-    "OsImageHashAdded(bytes32)": TypedContractEvent<
-      OsImageHashAddedEvent.InputTuple,
-      OsImageHashAddedEvent.OutputTuple,
-      OsImageHashAddedEvent.OutputObject
-    >;
-    OsImageHashAdded: TypedContractEvent<
-      OsImageHashAddedEvent.InputTuple,
-      OsImageHashAddedEvent.OutputTuple,
-      OsImageHashAddedEvent.OutputObject
-    >;
-
-    "OsImageHashRemoved(bytes32)": TypedContractEvent<
-      OsImageHashRemovedEvent.InputTuple,
-      OsImageHashRemovedEvent.OutputTuple,
-      OsImageHashRemovedEvent.OutputObject
-    >;
-    OsImageHashRemoved: TypedContractEvent<
-      OsImageHashRemovedEvent.InputTuple,
-      OsImageHashRemovedEvent.OutputTuple,
-      OsImageHashRemovedEvent.OutputObject
-    >;
-
     "OwnershipTransferred(address,address)": TypedContractEvent<
       OwnershipTransferredEvent.InputTuple,
       OwnershipTransferredEvent.OutputTuple,
@@ -1125,6 +1070,17 @@ export interface KmsAuth extends BaseContract {
       OwnershipTransferredEvent.InputTuple,
       OwnershipTransferredEvent.OutputTuple,
       OwnershipTransferredEvent.OutputObject
+    >;
+
+    "TproxyAppIdSet(string)": TypedContractEvent<
+      TproxyAppIdSetEvent.InputTuple,
+      TproxyAppIdSetEvent.OutputTuple,
+      TproxyAppIdSetEvent.OutputObject
+    >;
+    TproxyAppIdSet: TypedContractEvent<
+      TproxyAppIdSetEvent.InputTuple,
+      TproxyAppIdSetEvent.OutputTuple,
+      TproxyAppIdSetEvent.OutputObject
     >;
 
     "Upgraded(address)": TypedContractEvent<

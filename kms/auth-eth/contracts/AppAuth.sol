@@ -2,19 +2,15 @@
 pragma solidity ^0.8.22;
 
 import "./IAppAuth.sol";
-import "./IAppAuthBasicManagement.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeable.sol";
 
 contract AppAuth is
     Initializable,
     OwnableUpgradeable,
     UUPSUpgradeable,
-    ERC165Upgradeable,
-    IAppAuth,
-    IAppAuthBasicManagement
+    IAppAuth
 {
     // App ID this contract is managing
     address public appId;
@@ -31,8 +27,12 @@ contract AppAuth is
     // Mapping of allowed device IDs for this app
     mapping(bytes32 => bool) public allowedDeviceIds;
 
-    // Additional events specific to AppAuth
+    // Events
+    event ComposeHashAdded(bytes32 composeHash);
+    event ComposeHashRemoved(bytes32 composeHash);
     event UpgradesDisabled();
+    event DeviceAdded(bytes32 deviceId);
+    event DeviceRemoved(bytes32 deviceId);
     event AllowAnyDeviceSet(bool allowAny);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -42,58 +42,21 @@ contract AppAuth is
 
     // Initialize the contract
     function initialize(
-        address initialOwner,// 初始所有者
-        address _appId,// 应用 ID
-        bool _disableUpgrades,// 是否禁用升级
-        bool _allowAnyDevice,// 是否允许任意设备
-        bytes32 initialDeviceId,// 初始设备 ID
-        bytes32 initialComposeHash// 初始组合哈希
+        address initialOwner,
+        address _appId,
+        bool _disableUpgrades,
+        bool _allowAnyDevice
     ) public initializer {
-        require(initialOwner != address(0), "invalid owner address");
-        require(_appId != address(0), "invalid app ID");
-        
+        require(initialOwner != address(0), "Invalid owner address");
+        require(_appId != address(0), "Invalid app ID");
         appId = _appId;
         _upgradesDisabled = _disableUpgrades;
         allowAnyDevice = _allowAnyDevice;
-        
-        // Add initial device if provided
-        if (initialDeviceId != bytes32(0)) {
-            allowedDeviceIds[initialDeviceId] = true;
-            emit DeviceAdded(initialDeviceId);
-        }
-        
-        // Add initial compose hash if provided
-        if (initialComposeHash != bytes32(0)) {
-            allowedComposeHashes[initialComposeHash] = true;
-            emit ComposeHashAdded(initialComposeHash);
-        }
-        
         __Ownable_init(initialOwner);
         __UUPSUpgradeable_init();
-        __ERC165_init();
-    }
-
-    /**
-     * @dev See {IERC165-supportsInterface}.
-     * @notice Returns true if this contract implements the interface defined by interfaceId
-     * @param interfaceId The interface identifier, as specified in ERC-165
-     * @return True if the contract implements `interfaceId`
-     */
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        virtual
-        override(ERC165Upgradeable, IERC165)
-        returns (bool)
-    {
-        return
-            interfaceId == 0x1e079198 || // IAppAuth
-            interfaceId == 0x8fd37527 || // IAppAuthBasicManagement
-            super.supportsInterface(interfaceId);
     }
 
     // Function to authorize upgrades (required by UUPSUpgradeable)
-    // 授权升级（仅所有者且未禁用升级）
     function _authorizeUpgrade(address) internal view override onlyOwner {
         require(!_upgradesDisabled, "Upgrades are permanently disabled");
     }
@@ -133,19 +96,16 @@ contract AppAuth is
         IAppAuth.AppBootInfo calldata bootInfo
     ) external view override returns (bool isAllowed, string memory reason) {
         // Check if this controller is responsible for the app
-        // 检查应用 ID 是否匹配
         if (bootInfo.appId != appId) {
             return (false, "Wrong app controller");
         }
 
         // Check if compose hash is allowed
-        // 检查组合哈希是否被允许
         if (!allowedComposeHashes[bootInfo.composeHash]) {
             return (false, "Compose hash not allowed");
         }
 
         // Check if device is allowed (when device restriction is enabled)
-        // 检查设备是否被允许（当设备限制启用时）
         if (!allowAnyDevice && !allowedDeviceIds[bootInfo.deviceId]) {
             return (false, "Device not allowed");
         }
@@ -154,7 +114,6 @@ contract AppAuth is
     }
 
     // Function to permanently disable upgrades
-    // 永久禁用升级
     function disableUpgrades() external onlyOwner {
         _upgradesDisabled = true;
         emit UpgradesDisabled();

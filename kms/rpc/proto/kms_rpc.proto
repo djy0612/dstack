@@ -4,11 +4,6 @@ import "google/protobuf/empty.proto";
 
 package kms;
 
-message GetAppKeyRequest {
-  uint32 api_version = 1;
-  string vm_config = 2;
-}
-
 message AppId {
   bytes app_id = 1;
 }
@@ -29,12 +24,8 @@ message AppKeyResponse {
   bytes k256_key = 4;
   // Signature of the k256 key signed by the root k256 key.
   bytes k256_signature = 5;
-  // Reverse proxy app ID from KmsAuth contract. (Deprecated. For backward compatibility)
-  string tproxy_app_id = 6;
   // Reverse proxy app ID from KmsAuth contract.
-  string gateway_app_id = 7;
-  // OS Image hash 
-  bytes os_image_hash = 8;
+  string gateway_app_id = 6;
 }
 
 message GetMetaResponse {
@@ -42,15 +33,6 @@ message GetMetaResponse {
   bool allow_any_upgrade = 2;
   bytes k256_pubkey = 3;
   BootstrapResponse bootstrap_info = 4;
-  bool is_dev = 5;
-  optional string gateway_app_id = 6;
-  optional string kms_contract_address = 7;
-  optional uint64 chain_id = 8;
-  optional string app_auth_implementation = 9;
-}
-
-message GetKmsKeyRequest {
-  string vm_config = 1;
 }
 
 message KmsKeys {
@@ -70,14 +52,55 @@ message GetTempCaCertResponse {
 }
 
 message SignCertRequest {
-  uint32 api_version = 1;
-  bytes csr = 2;
-  bytes signature = 3;
-  string vm_config = 4;
+  bytes csr = 1;
+  bytes signature = 2;
 }
 
 message SignCertResponse {
   repeated string certificate_chain = 1;
+}
+
+message RotateRootKeyRequest {
+  // Optional: specify key version to rotate to (if not provided, will increment current version)
+  uint32 target_version = 1;
+}
+
+message RotateRootKeyResponse {
+  uint32 new_version = 1;
+  bytes ca_pubkey = 2;
+  bytes k256_pubkey = 3;
+  bytes quote = 4;
+  bytes eventlog = 5;
+}
+
+message KeyVersionResponse {
+  uint32 current_version = 1;
+  uint32 active_version = 2;
+  bool rotation_in_progress = 3;
+  uint64 rotation_deadline = 4; // Unix timestamp when old keys will be deprecated
+}
+
+message GetAppKeyRequest {
+  // The app compose file
+  string app_compose = 2;
+  // Optional: specify key version to use (if not provided, uses active version)
+  uint32 key_version = 3;
+}
+
+message DeriveK256KeyRequest {
+  // Path to the key to derive
+  string path = 1;
+  // Purpose of the key
+  string purpose = 2;
+  // Optional: specify key version to use (if not provided, uses active version)
+  uint32 key_version = 3;
+}
+
+message DeriveK256KeyResponse {
+  // Derived k256 key
+  bytes k256_key = 1;
+  // Signature chain: [derived_key_signature, app_key_signature]
+  repeated bytes k256_signature_chain = 2;
 }
 
 // The kms public RPC service.
@@ -85,7 +108,7 @@ service KMS {
   // Request the app key given the app id and tdx quote
   rpc GetAppKey(GetAppKeyRequest) returns (AppKeyResponse);
   // KMS key handover
-  rpc GetKmsKey(GetKmsKeyRequest) returns (KmsKeyResponse);
+  rpc GetKmsKey(google.protobuf.Empty) returns (KmsKeyResponse);
   // Request the app environment encryption public key given the app id
   rpc GetAppEnvEncryptPubKey(AppId) returns (PublicKeyResponse);
   // Request the KMS instance metadata for use as a probe and health check.
@@ -94,30 +117,12 @@ service KMS {
   rpc GetTempCaCert(google.protobuf.Empty) returns (GetTempCaCertResponse);
   // Sign a certificate
   rpc SignCert(SignCertRequest) returns (SignCertResponse);
-  // Clear the image cache
-  rpc ClearImageCache(ClearImageCacheRequest) returns (google.protobuf.Empty);
-  //新增kms的rpc服务
-  // Rotate root keys (CA key and k256 key)
+  // Rotate root keys to a new version
   rpc RotateRootKey(RotateRootKeyRequest) returns (RotateRootKeyResponse);
-}
-
-//添加两个message定义
-message RotateRootKeyRequest {
-  string token = 1; // 管理员令牌，用于验证权限
-  bool backup_old_keys = 2; // 是否备份旧密钥
-}
-
-message RotateRootKeyResponse {
-  bytes old_ca_pubkey = 1; // 旧CA公钥
-  bytes new_ca_pubkey = 2; // 新CA公钥
-  bytes old_k256_pubkey = 3; // 旧k256公钥
-  bytes new_k256_pubkey = 4; // 新k256公钥
-}
-
-message ClearImageCacheRequest {
-  string token = 1;
-  string image_hash = 2;
-  string config_hash = 3;
+  // Get current key version information
+  rpc GetKeyVersion(google.protobuf.Empty) returns (KeyVersionResponse);
+  // Derive a new ECDSA key with k256 EC curve from app key
+  rpc DeriveK256Key(DeriveK256KeyRequest) returns (DeriveK256KeyResponse);
 }
 
 message BootstrapRequest {

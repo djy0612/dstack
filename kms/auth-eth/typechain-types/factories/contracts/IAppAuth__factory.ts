@@ -42,7 +42,7 @@ const _abi = [
           },
           {
             internalType: "bytes32",
-            name: "osImageHash",
+            name: "mrImage",
             type: "bytes32",
           },
           {
@@ -72,25 +72,6 @@ const _abi = [
         internalType: "string",
         name: "reason",
         type: "string",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "bytes4",
-        name: "interfaceId",
-        type: "bytes4",
-      },
-    ],
-    name: "supportsInterface",
-    outputs: [
-      {
-        internalType: "bool",
-        name: "",
-        type: "bool",
       },
     ],
     stateMutability: "view",

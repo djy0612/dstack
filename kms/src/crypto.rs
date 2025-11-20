@@ -3,7 +3,7 @@ use k256::ecdsa::SigningKey;
 use sha3::{Digest, Keccak256};
 
 use ra_tls::kdf;
-// 从父密钥派生一个新的 ECDSA 密钥，并生成签名
+
 pub(crate) fn derive_k256_key(
     parent_key: &SigningKey,
     app_id: &[u8],
@@ -25,7 +25,7 @@ pub(crate) fn derive_k256_key(
     )?;
     Ok((derived_signing_key, signature))
 }
-// 对消息进行签名
+
 pub(crate) fn sign_message(
     key: &SigningKey,
     prefix: &[u8],
